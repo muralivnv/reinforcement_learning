@@ -1,0 +1,30 @@
+---
+world:
+  size: [200, 100]
+  barriers:
+    - {start: [0, 0],   end: [0, 25]}
+    - {start: [0, 25],  end: [60, 25]}
+    - {start: [60, 25], end: [60, 0]}
+    - {start: [60, 0],  end: [0, 0]}
+
+    - {start: [0, 50],  end:  [0, 99]}
+    - {start: [0, 99],  end: [60, 99]}
+    - {start: [60, 99], end: [60, 50]}
+    - {start: [60, 50], end: [0, 50]}
+
+    - {start: [80, 0],   end: [80, 25]}
+    - {start: [80, 25],  end: [199, 25]}
+    - {start: [199, 25], end: [199, 0]}
+    - {start: [199, 0],  end: [80, 0]}
+  entry_points:
+    - {start: [20, 25],  end: [40, 25]}
+    - {start: [60, 15],  end: [60, 5]}
+    - {start: [20, 50],  end: [40, 50]}
+    - {start: [80, 15],  end: [80, 5]}
+    - {start: [110, 25], end: [170, 25]}
+
+robot:
+  max_speed: 2.0 # m/sec
+  cycle_time: 0.040 # sec
+
+...

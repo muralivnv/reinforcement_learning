@@ -1,0 +1,41 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Current File",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal"
+    },
+    {
+            "name": "VcDbg[Dbg]",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/robot_tasker.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cmake_build[DBG]",
+            "visualizerFile": "C:\\CppPkgs\\vcpkg\\installed\\x64-windows\\include\\cpputil\\debug_helpers\\eigen.natvis",
+            "environment": [],
+            "externalConsole": false
+    },
+    {
+        "name": "VcDbg[Rel]",
+        "type": "cppvsdbg",
+        "request": "launch",
+        "program": "${workspaceFolder}/build/Release/robot_tasker.exe",
+        "args": [],
+        "stopAtEntry": false,
+        "cwd": "${workspaceFolder}",
+        "preLaunchTask": "cmake_build[REL]",
+        "visualizerFile": "C:\\CppPkgs\\vcpkg\\installed\\x64-windows\\include\\cpputil\\debug_helpers\\eigen.natvis",
+        "environment": [],
+        "externalConsole": false
+    }
+  ]
+}
