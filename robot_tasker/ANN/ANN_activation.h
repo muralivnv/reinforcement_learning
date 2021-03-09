@@ -94,10 +94,6 @@ class ActivationBase{
     template<typename EigenDerived>
     auto grad(const eig::DenseBase<EigenDerived>& activation) const
     {  return activation;  }
-
-    template<typename EigenDerived1, typename EigenDerived2>
-    auto grad_batch(const eig::DenseBase<EigenDerived2>& activation) const
-    {  return std::make_tuple(eig::DenseBase<EigenDerived1>(), eig::DenseBase<EigenDerived2>());  }
 };
 
 class Sigmoid: public ActivationBase{
@@ -118,41 +114,11 @@ class Sigmoid: public ActivationBase{
     float activation(const float wx_b) const
     { return 1.0F/(1.0F + std::expf(wx_b)); }
     
-    template<typename EigenDerived1, typename EigenDerived2>
-    auto grad(const eig::DenseBase<EigenDerived1>& before_layer_output,
-              const eig::DenseBase<EigenDerived2>& activation) const
+    template<typename EigenDerived>
+    auto grad(const eig::DenseBase<EigenDerived>& activation) const
     {
       auto gradient = activation.array()*(1.0F - activation.array());
-      size_t before_layer_n_nodes = before_layer_output.rows();
-      size_t cur_layer_n_nodes    = activation.rows();
-
-      RL::VectorX<float> weight_grad (before_layer_n_nodes*cur_layer_n_nodes);
-
-      for (int i = 0u; i < cur_layer_n_nodes; i++)
-      { weight_grad(seq(i*before_layer_n_nodes, (i+1)*before_layer_n_nodes-1)) = gradient.array() * before_layer_output.array();  }
-
-      return std::make_tuple(weight_grad, gradient);
-    }
-
-    template<int BatchSize, typename EigenDerived1, typename EigenDerived2>
-    auto grad_batch(const eig::DenseBase<EigenDerived1>& before_layer_output,
-                    const eig::DenseBase<EigenDerived2>& activation) const
-    {
-      auto gradient = activation.array()*(1.0F - activation.array());
-      size_t before_layer_n_nodes = before_layer_output.cols();
-      size_t cur_layer_n_nodes    = activation.cols();
-
-      RL::MatrixX<float> weight_grad (BatchSize, before_layer_n_nodes*cur_layer_n_nodes);
-
-      for (size_t i = 0u; i < cur_layer_n_nodes; i++)
-      {
-        for (size_t j = 0u; j < before_layer_n_nodes; j++) 
-        {
-          weight_grad(all, (i*before_layer_n_nodes + j)) = gradient(all, i).array() * before_layer_output(all, j).array();  
-        }
-      }
-
-      return std::make_tuple(weight_grad, gradient);
+      return gradient;
     }
 };
 
@@ -170,43 +136,13 @@ class ReLU: public ActivationBase{
     float activation(const float wx_b) const
     {  return wx_b < 0.0F?0.0F:wx_b;  }
     
-    template<typename EigenDerived1, typename EigenDerived2>
-    auto grad(const eig::DenseBase<EigenDerived1>& before_layer_output,
-              const eig::DenseBase<EigenDerived2>& activation) const
+    template<typename EigenDerived>
+    auto grad(const eig::DenseBase<EigenDerived>& activation) const
     {
       auto gradient = activation.unaryExpr([](float v){return v < 0.0F?0.0F:1.0F;});
-      size_t before_layer_n_nodes = before_layer_output.rows();
-      size_t cur_layer_n_nodes    = activation.rows();
-
-      RL::VectorX<float> weight_grad (before_layer_n_nodes*cur_layer_n_nodes);
-      for (int i = 0u; i < cur_layer_n_nodes; i++)
-      { weight_grad(seq(i*before_layer_n_nodes, (i+1)*before_layer_n_nodes-1)) = gradient.array() * before_layer_output.array();  }
-      
-      return std::make_tuple(weight_grad, gradient);
-    }
-
-    template<int BatchSize, typename EigenDerived1, typename EigenDerived2>
-    auto grad_batch(const eig::DenseBase<EigenDerived1>& before_layer_output,
-                    const eig::DenseBase<EigenDerived2>& activation) const
-    {
-      auto gradient = activation.unaryExpr([](float v){return v < 0.0F?0.0F:1.0F;});
-      size_t before_layer_n_nodes = before_layer_output.cols();
-      size_t cur_layer_n_nodes    = activation.cols();
-
-      RL::MatrixX<float> weight_grad (BatchSize, before_layer_n_nodes*cur_layer_n_nodes);
-
-      for (size_t i = 0u; i < cur_layer_n_nodes; i++)
-      {
-        for (size_t j = 0u; j < before_layer_n_nodes; j++) 
-        {
-          weight_grad(all, (i*before_layer_n_nodes + j)) = gradient(all, i).array() * before_layer_output(all, j).array();  
-        }
-      }
-
-      return std::make_tuple(weight_grad, gradient);
+      return gradient;
     }
 };
-
 
 } // namespace {ANN}
 #endif

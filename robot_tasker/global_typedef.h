@@ -31,6 +31,7 @@ namespace eig    = Eigen;
 namespace chrono = std::chrono;
 namespace yml    = YAML;
 using namespace std::string_literals;
+using namespace std::chrono_literals;
 
 #define ITER(X) std::begin(X), std::end(X)
 #define TIME_NOW chrono::system_clock::now()

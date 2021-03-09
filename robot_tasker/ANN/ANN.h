@@ -167,7 +167,7 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>
   // perform backward propagation to calculate gradient
   auto loss_grad = ann.loss_grad(activations.back(), ref_out);
 
-  // TODO: write backward propagation
+  // TODO: Write backward propagation
 
   return std::make_tuple(weight_grad, bias_grad);
 }

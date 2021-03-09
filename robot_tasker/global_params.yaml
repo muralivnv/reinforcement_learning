@@ -1,0 +1,9 @@
+---
+world:
+  size: [200, 300]
+
+robot:
+  max_speed: 2.0 # m/sec
+  cycle_time: 0.040 # sec
+
+...
