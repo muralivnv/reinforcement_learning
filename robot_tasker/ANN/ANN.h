@@ -132,8 +132,8 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>
                     const eig::DenseBase<EigenDerived1>&                           input,
                     const eig::DenseBase<EigenDerived2>&                           ref_out)
 {
-  constexpr size_t output_len = ann_output_len<LayerNodeConfig...>::value;
-  constexpr size_t n_layers   = pack_len<InputSize, LayerNodeConfig...>::value;
+  constexpr int output_len = ann_output_len<LayerNodeConfig...>::value;
+  constexpr int n_layers   = pack_len<InputSize, LayerNodeConfig...>::value;
 
   // Perform forward propagation
   vector<RL::MatrixX<float>> activations(n_layers);
@@ -143,18 +143,18 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>
   activations[0] = RL::MatrixX<float>(input.rows(), input.cols());
   activations[0] = input;
 
-  size_t weights_count = 0u;
-  size_t bias_count    = 0u;
-  for (size_t layer = 1u; layer < ann.n_layers; layer++)
+  int weights_count = 0;
+  int bias_count    = 0;
+  for (int layer = 1; layer < (int)ann.n_layers; layer++)
   {
-    size_t n_nodes_last_layer = ann.n_nodes(layer-1u);
-    size_t n_nodes_cur_layer  = ann.n_nodes(layer);
-    size_t weights_start      = weights_count;
-    size_t weights_end        = weights_start + (n_nodes_cur_layer*n_nodes_last_layer);
+    int n_nodes_last_layer = (int)ann.n_nodes(layer-1);
+    int n_nodes_cur_layer  = (int)ann.n_nodes(layer);
+    int weights_start      = weights_count;
+    int weights_end        = weights_start + (n_nodes_cur_layer*n_nodes_last_layer);
     
-    auto b = ann.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1u));
+    auto b = ann.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1));
     activations[layer] = RL::MatrixX<float>(BatchSize, n_nodes_cur_layer);
-    for (size_t node = 0u; node < n_nodes_cur_layer; node++)
+    for (int node = 0; node < n_nodes_cur_layer; node++)
     {
       // calculate wX + b
       auto wx = activations[layer-1] * ann.weight(seq(weights_start+node, weights_end, n_nodes_cur_layer));
@@ -168,6 +168,71 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>
   auto loss_grad = ann.loss_grad(activations.back(), ref_out);
 
   // TODO: Write backward propagation
+  
+  // calculate delta for last layer
+  RL::MatrixX<float> delta, delta_to_here;
+  int n_nodes_this_layer = ann.n_nodes(last);
+  int n_nodes_prev_layer = ann.n_nodes(last-1);
+
+  auto this_layer_activation_grad = ann.layer_activation_func.back().grad(activations.back());
+  delta.resize(loss_grad.rows(), this_layer_activation_grad.cols());
+  delta_to_here.resize(delta.rows(), delta.cols());
+
+  auto prev_layer_activations = activations[ann.n_layers-2](all, all);
+  delta = loss_grad.array() * this_layer_activation_grad;
+  
+  int weight_end   = (int)ann.weight.rows()-1;
+  int weight_start = weight_end - (n_nodes_this_layer*n_nodes_prev_layer);
+  int bias_end     = (int)ann.bias.rows()-1;
+  int bias_start   = bias_end   - (n_nodes_this_layer);
+
+  for (int node = 0; node < n_nodes_this_layer; node++)
+  {
+    for (int j = 0; j < n_nodes_prev_layer; j++)
+    {
+      auto temp = delta(all, node)*prev_layer_activations(all, j);
+      weight_grad(weight_start+node*n_nodes_prev_layer+j) = temp.mean();
+    }
+    bias_grad(bias_start+node) = delta(all, node).mean();
+  }
+
+  // calculate gradient for remaining layers
+  delta_to_here = std::move(delta);
+  for (int layer = ann.n_layers-2; layer > 0; layer--)
+  {
+    n_nodes_this_layer         = ann.n_nodes(layer);
+    n_nodes_prev_layer         = ann.n_nodes(layer-1);
+    int n_nodes_next_layer     = ann.n_nodes(layer+1);
+    this_layer_activation_grad = ann.layer_activation_func[layer].grad(activations[layer]);
+    prev_layer_activations     = activations[layer-1](all, all);
+
+    delta.resize(loss_grad.rows(), n_nodes_this_layer);
+
+    // calculate delta
+    weight_end   = (int)ann.weight.rows()-1;
+    weight_start = weight_end - (n_nodes_this_layer*n_nodes_next_layer);
+    for (int node = 0; node < n_nodes_this_layer; node++)
+    {
+      delta(all, node) = delta_to_here*ann.weight(seq(weight_start+node, weight_end, n_nodes_this_layer));
+    }
+    delta.array() *= this_layer_activation_grad;
+
+    // calculate gradient
+    weight_end   = (int)ann.weight.rows()-1 - (n_nodes_this_layer*n_nodes_next_layer);
+    weight_start = weight_end - (n_nodes_this_layer*n_nodes_prev_layer);
+    for (int node = 0; node < n_nodes_this_layer; node++)
+   {
+      for (int j = 0; j < n_nodes_prev_layer; j++)
+      {
+        auto temp = delta(all, node)*prev_layer_activations(all, j);
+        weight_grad(weight_start+(node*n_nodes_prev_layer)+j) = temp.mean();
+      }
+      bias_grad(bias_start+node) = delta(all, node).mean();
+   }
+
+   // swap delta
+    delta_to_here = std::move(delta);
+  }
 
   return std::make_tuple(weight_grad, bias_grad);
 }
