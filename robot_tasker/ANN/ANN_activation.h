@@ -47,8 +47,8 @@ class Initializer{
     }
 
     template<typename EigenDerived1, typename EigenDerived2>
-    auto init(eig::DenseBase<EigenDerived1>& weights,
-              eig::DenseBase<EigenDerived2>& bias,
+    auto init(eig::ArrayBase<EigenDerived1>& weights,
+              eig::ArrayBase<EigenDerived2>& bias,
               int                            n_nodes_last_layer)
     {
       float std_dev = 1.0F;
@@ -81,31 +81,22 @@ class ActivationBase{
   public:
     Initializer initializer;
     ActivationBase(){}
-    ActivationBase(Initializer& param_initializer) : initializer(param_initializer){}
+    ActivationBase(Initializer&& param_initializer) : initializer(param_initializer){}
     virtual ~ActivationBase(){}
 
-    template<typename EigenDerived>
-    auto activation_batch(const eig::DenseBase<EigenDerived>& wx_b) const
-    { return RL::MatrixX<float>{}; }
+    // template<typename EigenDerived>
+    // auto activation_batch(const eig::ArrayBase<EigenDerived>& wx_b) const
+    // { return eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>{}; }
 
-    float activation(const float wx_b) const
-    { return wx_b; }
+    // float activation(const float wx_b) const
+    // { return wx_b; }
     
-    template<typename EigenDerived>
-    auto grad(const eig::DenseBase<EigenDerived>& activation) const
-    {  return activation;  }
-};
-
-class Sigmoid: public ActivationBase{
-  public:
-    Initializer initializer;
-    Sigmoid(){}
-    Sigmoid(Initializer& param_initializer): initializer(param_initializer){}
-
-    ~Sigmoid(){}
+    // template<typename EigenDerived>
+    // auto grad(const eig::ArrayBase<EigenDerived>& activation) const
+    // {  return activation.derived();  }
 
     template<typename EigenDerived>
-    auto activation_batch(const eig::DenseBase<EigenDerived>& wx_b) const
+    auto activation_batch(const eig::ArrayBase<EigenDerived>& wx_b) const
     {
       auto retval = 1.0F + eig::exp(wx_b);
       return 1.0F/retval;
@@ -115,7 +106,33 @@ class Sigmoid: public ActivationBase{
     { return 1.0F/(1.0F + std::expf(wx_b)); }
     
     template<typename EigenDerived>
-    auto grad(const eig::DenseBase<EigenDerived>& activation) const
+    auto grad(const eig::ArrayBase<EigenDerived>& activation) const
+    {
+      auto gradient = activation.array()*(1.0F - activation.array());
+      return gradient;
+    }
+};
+
+class Sigmoid: public ActivationBase{
+  public:
+    Initializer initializer;
+    Sigmoid(){}
+    Sigmoid(Initializer&& param_initializer): initializer(param_initializer){}
+
+    ~Sigmoid(){}
+
+    template<typename EigenDerived>
+    auto activation_batch(const eig::ArrayBase<EigenDerived>& wx_b) const
+    {
+      auto retval = 1.0F + eig::exp(wx_b);
+      return 1.0F/retval;
+    }
+
+    float activation(const float wx_b) const
+    { return 1.0F/(1.0F + std::expf(wx_b)); }
+    
+    template<typename EigenDerived>
+    auto grad(const eig::ArrayBase<EigenDerived>& activation) const
     {
       auto gradient = activation.array()*(1.0F - activation.array());
       return gradient;
@@ -126,18 +143,18 @@ class ReLU: public ActivationBase{
   public:
     Initializer initializer;
     ReLU(){}
-    ReLU(Initializer& param_initializer):initializer(param_initializer){}
+    ReLU(Initializer&& param_initializer):initializer(param_initializer){}
     ~ReLU(){}
 
     template<typename EigenDerived>
-    auto activation_batch(const eig::DenseBase<EigenDerived>& wx_b) const
+    auto activation_batch(const eig::ArrayBase<EigenDerived>& wx_b) const
     {  return wx_b.unaryExpr([](float v){return v < 0.0F?0.0F:v; });  }
 
     float activation(const float wx_b) const
     {  return wx_b < 0.0F?0.0F:wx_b;  }
     
     template<typename EigenDerived>
-    auto grad(const eig::DenseBase<EigenDerived>& activation) const
+    auto grad(const eig::ArrayBase<EigenDerived>& activation) const
     {
       auto gradient = activation.unaryExpr([](float v){return v < 0.0F?0.0F:1.0F;});
       return gradient;

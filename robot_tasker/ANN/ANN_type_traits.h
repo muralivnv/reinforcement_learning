@@ -23,12 +23,18 @@ template<> struct pack_prod<>   { static const int value = 1;};
 template<int...Rest> struct ann_weights_len;
 template<int Left, int Right, int ...Rest>
 struct ann_weights_len<Left, Right, Rest...> { static const int value = (Left*Right) + ann_weights_len<Right, Rest...>::value;};
-template<int last> struct ann_weights_len<last> {static const int value = 0; };
+template<int Last> struct ann_weights_len<Last> {static const int value = 0; };
 
 // NN last node len
 template<int...Rest> struct ann_output_len;
 template<int Left, int ...Rest>
 struct ann_output_len<Left, Rest...> { static const int value = ann_output_len<Rest...>::value;};
-template<int last> struct ann_output_len<last> {static const int value = last; };
+template<int Last> struct ann_output_len<Last> {static const int value = Last; };
+
+// get maximum layer length
+template<int...Rest> struct max_layer_len;
+template<int Left, int ...Rest>
+struct max_layer_len<Left, Rest...> { static const int value = (Left) > max_layer_len<Rest...>::value?Left:max_layer_len<Rest...>::value; };
+template<int Last> struct max_layer_len<Last> { static const int value = Last; };
 
 #endif
