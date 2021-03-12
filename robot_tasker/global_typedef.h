@@ -25,7 +25,7 @@
 
 using std::vector, std::string, std::size_t, std::array, std::fstream, std::tuple, std::tie;
 using std::for_each, std::copy, std::transform;
-using Eigen::all, Eigen::seq, Eigen::last;
+using Eigen::all, Eigen::seq, Eigen::last, Eigen::NoChange;
 
 namespace eig    = Eigen;
 namespace chrono = std::chrono;

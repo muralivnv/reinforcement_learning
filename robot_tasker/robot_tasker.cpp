@@ -47,33 +47,48 @@ auto test_gradient(ArtificialNeuralNetwork<2, 3, 3, 2>& ann,
   decltype(b) bias_grad;
 
   auto pred_out = forward_batch<25>(ann, X);
+  float epsilon = 1e-8F;
 
   // calculate weight gradient
   auto loss_noperturbed = loss(pred_out, Y);
   float loss_noperturbed_normalized = loss_noperturbed.mean();
   for (int i = 0; i < w.rows(); i++)
   {
-    ann.weight(i, 0) += 1e-5F;
+    ann.weight(i, 0) -= epsilon;
     auto pred_out_perturbed = forward_batch<25>(ann, X);
-    ann.weight(i, 0) -= 1e-5F;
+    ann.weight(i, 0) += epsilon;
 
     auto loss_perturbed = loss(pred_out_perturbed, Y);
-    float loss_perturbed_normalized = loss_perturbed.mean();
+    float loss_perturbed_normalizedLeft = loss_perturbed.mean();
 
-    weight_grad(i, 0) = (loss_perturbed_normalized - loss_noperturbed_normalized)/1e-5F;
+    ann.weight(i, 0) += epsilon;
+    pred_out_perturbed = forward_batch<25>(ann, X);
+    ann.weight(i, 0) -= epsilon;
+
+    loss_perturbed = loss(pred_out_perturbed, Y);
+    float loss_perturbed_normalizedRight = loss_perturbed.mean();
+
+    weight_grad(i, 0) = (loss_perturbed_normalizedLeft - loss_perturbed_normalizedRight)/(2.0F*epsilon);
   }
 
   // calculate bias gradient
   for (int i = 0; i < b.rows(); i++)
   {
-    ann.bias(i, 0) += 1e-5F;
+    ann.bias(i, 0) -= epsilon;
     auto pred_out_perturbed = forward_batch<25>(ann, X);
-    ann.bias(i, 0) -= 1e-5F;
+    ann.bias(i, 0) += epsilon;
 
     auto loss_perturbed = loss(pred_out_perturbed, Y);
-    float loss_perturbed_normalized = loss_perturbed.mean();
+    float loss_perturbed_normalizedLeft = loss_perturbed.mean();
 
-    bias_grad(i, 0) = (loss_perturbed_normalized - loss_noperturbed_normalized)/1e-5F;
+    ann.bias(i, 0) += epsilon;
+    pred_out_perturbed = forward_batch<25>(ann, X);
+    ann.bias(i, 0) -= epsilon;
+
+    loss_perturbed = loss(pred_out_perturbed, Y);
+    float loss_perturbed_normalizedRight = loss_perturbed.mean();
+
+    bias_grad(i, 0) = (loss_perturbed_normalizedLeft - loss_perturbed_normalizedRight)/(2.0F*epsilon);
   }
 
   return std::make_tuple(weight_grad, bias_grad);

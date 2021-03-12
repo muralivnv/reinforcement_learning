@@ -103,7 +103,7 @@ auto forward_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>&
   constexpr int largest_layer_len = max_layer_len<InputSize, LayerNodeConfig...>::value;
   eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor, BatchSize, largest_layer_len> prev_layer_activation;
   eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor, BatchSize, largest_layer_len> this_layer_activation;
-  prev_layer_activation.resize(input.rows(), input.cols());
+  prev_layer_activation.conservativeResize(NoChange, input.cols());
   prev_layer_activation = input;
 
   int weights_count = 0;
@@ -116,7 +116,7 @@ auto forward_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>&
     int weights_end        = weights_start + (n_nodes_cur_layer*n_nodes_last_layer) - 1;
     
     auto b = ann.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1));
-    this_layer_activation.resize(BatchSize, n_nodes_cur_layer);
+    this_layer_activation.conservativeResize(NoChange, n_nodes_cur_layer);
 
     for (size_t node = 0; node < n_nodes_cur_layer; node++)
     {
@@ -187,8 +187,8 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>
   int n_nodes_prev_layer = (int)ann.n_nodes(last-1);
 
   decltype(delta) this_layer_activation_grad = ann.layer_activation_func.back().grad(activations.back());
-  delta.resize(loss_grad.rows(), this_layer_activation_grad.cols());
-  delta_to_here.resize(delta.rows(), delta.cols());
+  delta.conservativeResize(NoChange, this_layer_activation_grad.cols());
+  delta_to_here.conservativeResize(NoChange, delta.cols());
 
   decltype(delta) prev_layer_activations = activations[ann.n_layers-1];
   delta = loss_grad * this_layer_activation_grad;
@@ -220,7 +220,7 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>
     this_layer_activation_grad = ann.layer_activation_func[layer].grad(activations[layer]);
     prev_layer_activations     = activations[layer-1];
 
-    delta.resize(BatchSize, n_nodes_this_layer);
+    delta.conservativeResize(NoChange, n_nodes_this_layer);
 
     // calculate delta
     for (int node = 0; node < n_nodes_this_layer; node++)
@@ -232,7 +232,7 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>
     // calculate gradient
     weight_end   = next_layer_weights_start - 1;
     weight_start = weight_end - (n_nodes_this_layer*n_nodes_prev_layer) + 1;
-    for (int node = 0; node < n_nodes_this_layer; node++)
+   for (int node = 0; node < n_nodes_this_layer; node++)
    {
       for (int j = 0; j < n_nodes_prev_layer; j++)
       {
@@ -247,7 +247,6 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>
     next_layer_weights_end   = weight_end;
     next_layer_weights_start = weight_start;
   }
-
   return retval;
 }
 
