@@ -12,6 +12,12 @@ enum InitializerIdentifier{
   HE
 };
 
+enum ActivationIdentifier{
+  SIGMOID,
+  RELU, 
+  NONE
+};
+
 class Initializer{
   private:
     std::random_device rand_seed_;
@@ -77,87 +83,92 @@ class Initializer{
     }
 };
 
-class ActivationBase{
+class Activation{
+  private:
+    ActivationIdentifier activation_e;
   public:
     Initializer initializer;
-    ActivationBase(){}
-    ActivationBase(Initializer&& param_initializer) : initializer(param_initializer){}
-    virtual ~ActivationBase(){}
-
-    // template<typename EigenDerived>
-    // auto activation_batch(const eig::ArrayBase<EigenDerived>& wx_b) const
-    // { return eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>{}; }
-
-    // float activation(const float wx_b) const
-    // { return wx_b; }
-    
-    // template<typename EigenDerived>
-    // auto grad(const eig::ArrayBase<EigenDerived>& activation) const
-    // {  return activation.derived();  }
+    Activation(){}
+    Activation(ActivationIdentifier&& activation, Initializer&& param_initializer) : activation_e(activation), 
+                                                                                     initializer(param_initializer){}
+    ~Activation(){}
 
     template<typename EigenDerived>
     auto activation_batch(const eig::ArrayBase<EigenDerived>& wx_b) const
     {
-      auto retval = 1.0F + eig::exp(wx_b);
-      return 1.0F/retval;
+      eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor> retval(wx_b.rows(), wx_b.cols());
+      switch(activation_e)
+      {
+        case SIGMOID:
+        {
+          auto retval_expr = 1.0F/(1.0F + eig::exp(wx_b));
+          retval = retval_expr.eval();
+          break;
+        }
+        case RELU:
+        {
+          auto retval_expr = wx_b.unaryExpr([](float v){return v < 0.0F?0.0F:v; });
+          retval = retval_expr.eval();
+          break;
+        }
+        default:
+        {
+          retval = wx_b;
+          break;
+        }
+      }
+      return retval;
     }
 
     float activation(const float wx_b) const
-    { return 1.0F/(1.0F + std::expf(wx_b)); }
+    { 
+      float retval;
+      switch(activation_e)
+      {
+        case SIGMOID:
+        {
+          retval  = 1.0F/(1.0F + std::expf(wx_b));
+          break;
+        }
+        case RELU:
+        {
+          retval = wx_b < 0.0F?0.0F:wx_b;
+          break;
+        }
+        default:
+        {
+          retval = wx_b;
+          break;
+        }
+      }
+      return retval;
+    }
     
     template<typename EigenDerived>
     auto grad(const eig::ArrayBase<EigenDerived>& activation) const
     {
-      auto gradient = activation.array()*(1.0F - activation.array());
-      return gradient;
-    }
-};
-
-class Sigmoid: public ActivationBase{
-  public:
-    Initializer initializer;
-    Sigmoid(){}
-    Sigmoid(Initializer&& param_initializer): initializer(param_initializer){}
-
-    ~Sigmoid(){}
-
-    template<typename EigenDerived>
-    auto activation_batch(const eig::ArrayBase<EigenDerived>& wx_b) const
-    {
-      auto retval = 1.0F + eig::exp(wx_b);
-      return 1.0F/retval;
-    }
-
-    float activation(const float wx_b) const
-    { return 1.0F/(1.0F + std::expf(wx_b)); }
-    
-    template<typename EigenDerived>
-    auto grad(const eig::ArrayBase<EigenDerived>& activation) const
-    {
-      auto gradient = activation.array()*(1.0F - activation.array());
-      return gradient;
-    }
-};
-
-class ReLU: public ActivationBase{
-  public:
-    Initializer initializer;
-    ReLU(){}
-    ReLU(Initializer&& param_initializer):initializer(param_initializer){}
-    ~ReLU(){}
-
-    template<typename EigenDerived>
-    auto activation_batch(const eig::ArrayBase<EigenDerived>& wx_b) const
-    {  return wx_b.unaryExpr([](float v){return v < 0.0F?0.0F:v; });  }
-
-    float activation(const float wx_b) const
-    {  return wx_b < 0.0F?0.0F:wx_b;  }
-    
-    template<typename EigenDerived>
-    auto grad(const eig::ArrayBase<EigenDerived>& activation) const
-    {
-      auto gradient = activation.unaryExpr([](float v){return v < 0.0F?0.0F:1.0F;});
-      return gradient;
+      eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor> retval(activation.rows(), activation.cols());
+      switch(activation_e)
+      {
+        case SIGMOID:
+        {
+          auto retval_expr = activation*(1.0F - activation);
+          retval = retval_expr.eval();
+          break;
+        }
+        case RELU:
+        {
+          auto retval_expr = activation.unaryExpr([](float v){return v < 0.0F?0.0F:1.0F;});
+          retval = retval_expr.eval();
+          break;
+        }
+        default:
+        {
+          retval = activation;
+          break;
+        }
+      }
+      return retval;
     }
 };
 

@@ -19,7 +19,7 @@ template<int ...LayerNodeConfig>
 using bias_t = eig::Array<float, pack_add<LayerNodeConfig...>::value, 1>;
 
 template<int ...LayerNodeConfig>
-using activations_t  = std::array<ANN::ActivationBase, pack_len<LayerNodeConfig...>::value>;
+using activations_t  = std::array<ANN::Activation, pack_len<LayerNodeConfig...>::value>;
 
 template<int InputSize, int ...LayerNodeConfig>
 using layerConfig_t = eig::Array<int, 1, pack_len<InputSize, LayerNodeConfig...>::value>;
@@ -34,7 +34,7 @@ template<int ...LayerNodeConfig>
 using output_t = eig::Array<float, ann_output_len<LayerNodeConfig...>::value, 1>;
 
 template<int SampleSize, int ...LayerNodeConfig>
-using output_batch_t = eig::Array<float, SampleSize, ann_output_len<LayerNodeConfig...>::value>;
+using output_batch_t = eig::Array<float, SampleSize, ann_output_len<LayerNodeConfig...>::value, eig::RowMajor>;
 
 using OptimizerParams = std::unordered_map<std::string, std::any>;
 
