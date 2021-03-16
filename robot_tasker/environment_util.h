@@ -3,7 +3,9 @@
 
 #include <filesystem> 
 #include <fstream>
+#include <unordered_map>
 #include <chrono>
+
 #include "global_typedef.h"
 #include "cppyplot.hpp"
 
@@ -11,51 +13,24 @@ namespace filesystem = std::filesystem;
 
 namespace ENV
 {
-vector<RL::Polynomial<1>> read_world_old(const std::string& config_name)
+std::unordered_map<std::string, float>
+read_global_config(const std::string& config_name)
 {
+  std::unordered_map<std::string, float> retval;
   yml::Node config = yml::LoadFile(config_name);
-  vector<RL::Polynomial<1>> world_map;
 
-  yml::Node barriers = config["world"]["barriers"];
-  for (size_t i = 0u; i < barriers.size(); i++)
-  {
-    const yml::Node& node = barriers[i];
-    const yml::Node& start = node["start"];
-    const yml::Node& end   = node["end"];
+  yml::Node node = config["world"]["size"];
+  retval.insert(std::make_pair("world/size/x", node[0].as<float>()));
+  retval.insert(std::make_pair("world/size/y", node[0].as<float>()));
 
-    unsigned int x1 = start[0].as<unsigned int>();
-    unsigned int y1 = start[1].as<unsigned int>();
-    unsigned int x2 = end[0].as<unsigned int>();
-    unsigned int y2 = end[1].as<unsigned int>();
+  yml::Node robot_config = config["robot"];
+  retval.insert(std::make_pair("robot/max_wheel_speed", robot_config["max_wheel_speed"].as<float>()));
+  retval.insert(std::make_pair("robot/wheel_radius", robot_config["wheel_radius"].as<float>()));
+  retval.insert(std::make_pair("robot/base_length", robot_config["base_length"].as<float>()));
 
-    if (x1 != x2)
-    {
-      RL::Polynomial<1> poly;
-      poly.coeff[0]  = (float)y1;
-      poly.coeff[1]  = (float)(y2 - y1)/(float)(x2 - x1);
-      poly.offset    = 0.0F;
-      poly.bound_1.x = (float)x1;
-      poly.bound_1.y = (float)y1;
-      poly.bound_2.x = (float)x2;
-      poly.bound_2.y = (float)y2;
-
-      world_map.push_back(poly);
-    }
-    else
-    {
-      RL::Polynomial<1> poly;
-      poly.coeff[0]  = (float)y1;
-      poly.coeff[1]  = INF;
-      poly.offset    = 0.0F;
-      poly.bound_1.x = (float)x1;
-      poly.bound_1.y = (float)y1;
-      poly.bound_2.x = (float)x2;
-      poly.bound_2.y = (float)y2;
-
-      world_map.push_back(poly);
-    }
-  }
-  return world_map;
+  retval.insert(std::make_pair("cycle_time", config["cycle_time"].as<float>()));
+  
+  return retval;
 }
 
 template<typename ArgLeft, typename ... ArgsRight>

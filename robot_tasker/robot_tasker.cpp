@@ -8,6 +8,7 @@
 
 using namespace ANN;
 #define WORLD_FILE ("X:/Video_Lectures/ReinforcementLearning/scripts/robot_tasker/world_barriers.csv")
+#define CONFIG_FILE ("X:/Video_Lectures/ReinforcementLearning/scripts/robot_tasker/global_params.yaml")
 
 // template<typename EigenDerived1, typename EigenDerived2>
 eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>
@@ -37,30 +38,9 @@ loss_grad(const eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>& pr
 
 int main()
 {
-  // auto world_barriers = ENV::read_world(WORLD_FILE);
+  auto world_barriers = ENV::read_world(WORLD_FILE);
+  auto global_config  = ENV::read_global_config(CONFIG_FILE);
   
-  // TODO: add robot parameter file for experimentation 
-  // auto robot_params   = ENV::read_robot_config("X:/Video_Lectures/ReinforcementLearning/scripts/robot_tasker/robot_params.yaml");
-
-  ArtificialNeuralNetwork<2, 3, 3, 4, 5, 6, 2> ann;
-  ann.dense(Activation(SIGMOID, HE), 
-            Activation(SIGMOID, HE), 
-            Activation(SIGMOID, HE), 
-            Activation(SIGMOID, HE), 
-            Activation(SIGMOID, HE), 
-            Activation(SIGMOID, HE));
-
-  eig::Array<float, 5000, 2, eig::RowMajor> X, Y;
-  X.setRandom(); Y.setRandom();
-
-  auto start = TIME_NOW;
-  auto[weight_grad, bias_grad] = gradient_batch<5000>(ann, X, Y, loss, loss_grad<5000, 2>);
-  auto end   = TIME_NOW;
-
-  std::cout << "Elapsed: " << std::chrono::duration<float>(end - start).count();
-
-  // std::cout << "\ndW: " << weight_grad << "\n";
-  // std::cout << "\ndb: " << bias_grad << "\n";
 
   return EXIT_SUCCESS;
 }

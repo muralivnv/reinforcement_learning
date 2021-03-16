@@ -38,6 +38,8 @@ using namespace std::chrono_literals;
 #define str2float(str, result) std::from_chars(str.data(), str.data()+str.length(), result)
 #define INF 100000.0F
 #define UNUSED(X) (void)(X)
+#define NOT(X) (!(X))
+#define PI (3.14159265F)
 
 namespace RL {
 template<typename T>
@@ -55,9 +57,22 @@ using Arrayf = eig::Matrix<float, Rows, 1, eig::ColMajor>;
 template<typename T>
 using VectorX = eig::Matrix<T, eig::Dynamic, 1, eig::ColMajor>;
 
+using GlobalConfig_t = std::unordered_map<std::string, float>;
+
 struct State2D{
   float x;
   float y;
+};
+
+struct DifferentialRobotState{
+  float x;   // (m)
+  float y;   // (m)
+  float psi; // heading (rad)
+};
+
+struct Action2D{
+  float action1;
+  float action2;
 };
 
 template<size_t N>
@@ -67,7 +82,6 @@ struct Polynomial{
   State2D bound_1;
   State2D bound_2;
 };
-
 
 struct RobotState{
   State2D position;

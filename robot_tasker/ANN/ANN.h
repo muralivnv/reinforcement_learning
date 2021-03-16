@@ -191,7 +191,7 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& 
 
   int next_layer_weights_end = 0, next_layer_weights_start = (int)ann.weight.rows();
   int next_layer_bias_end = 0, next_layer_bias_start = (int)ann.bias.rows();
-  for (int layer = ann.n_layers; layer > 0; layer--)
+  for (int layer = ann.n_layers; layer != 0; layer--)
   {
     n_nodes_this_layer              = ann.n_nodes[layer];
     n_nodes_prev_layer              = ann.n_nodes[layer-1];

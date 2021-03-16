@@ -1,0 +1,12 @@
+---
+world:
+  size: [200, 300]
+
+robot:
+  max_wheel_speed: 2.0 # m/sec
+  wheel_radius: 0.25 # m
+  base_length: 2.0 # m
+
+cycle_time: 0.040 # sec
+
+...
