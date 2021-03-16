@@ -12,7 +12,7 @@ template<int BatchSize, int InputSize, int ...LayerNodeCondfig, typename EigenDe
 void steepest_descent(const eig::DenseBase<EigenDerived1>& input, 
                       const eig::DenseBase<EigenDerived2>& ref_out,
                       const ANN::OptimizerParams&          params,
-                            ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>& ann)
+                            ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& ann)
 {
   static const size_t n_epochs    = std::any_cast<size_t>(params.at("n_epochs"));
   static const float step_size    = std::any_cast<float>(params.at("step_size"));
@@ -23,10 +23,10 @@ void steepest_descent(const eig::DenseBase<EigenDerived1>& input,
     auto [weight_grad, bias_grad] = gradient_batch(ann, input, ref_out);
 
     // update weights
-    ann.weight -= step_size*weight_grad; 
+    ann.weight -= (step_size*weight_grad); 
     
     // update bias
-    ann.bias   -= step_size*bias_grad;
+    ann.bias   -= (step_size*bias_grad);
   }
 }
 

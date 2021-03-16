@@ -12,17 +12,17 @@
 namespace ANN
 {
 
-template<int InputSize, int ... LayerNodeConfig>
-using weights_t = eig::Array<float, ann_weights_len<InputSize, LayerNodeConfig...>::value, 1>;
+template<int InputSize, int ... NHiddenLayers>
+using weights_t = eig::Array<float, ann_weights_len<InputSize, NHiddenLayers...>::value, 1>;
 
-template<int ...LayerNodeConfig>
-using bias_t = eig::Array<float, pack_add<LayerNodeConfig...>::value, 1>;
+template<int ...NHiddenLayers>
+using bias_t = eig::Array<float, pack_add<NHiddenLayers...>::value, 1>;
 
-template<int ...LayerNodeConfig>
-using activations_t  = std::array<ANN::Activation, pack_len<LayerNodeConfig...>::value>;
+template<int ...NHiddenLayers>
+using activations_t  = std::array<ANN::Activation, pack_len<NHiddenLayers...>::value>;
 
-template<int InputSize, int ...LayerNodeConfig>
-using layerConfig_t = eig::Array<int, 1, pack_len<InputSize, LayerNodeConfig...>::value>;
+template<int InputSize, int ...NHiddenLayers>
+using layerConfig_t = eig::Array<int, 1, pack_len<InputSize, NHiddenLayers...>::value>;
 
 template<typename EigenDerived1, typename EigenDerived2>
 using lossFcn_t     = std::function< eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>(const eig::ArrayBase<EigenDerived1>&, const eig::ArrayBase<EigenDerived2>&)>;
@@ -30,11 +30,11 @@ using lossFcn_t     = std::function< eig::Array<float, eig::Dynamic, eig::Dynami
 template<typename EigenDerived1, typename EigenDerived2>
 using lossFcnGrad_t = std::function< eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>(const eig::ArrayBase<EigenDerived1>&, const eig::ArrayBase<EigenDerived2>&)>;
 
-template<int ...LayerNodeConfig>
-using output_t = eig::Array<float, ann_output_len<LayerNodeConfig...>::value, 1>;
+template<int ...NHiddenLayers>
+using output_t = eig::Array<float, ann_output_len<NHiddenLayers...>::value, 1>;
 
-template<int SampleSize, int ...LayerNodeConfig>
-using output_batch_t = eig::Array<float, SampleSize, ann_output_len<LayerNodeConfig...>::value, eig::RowMajor>;
+template<int SampleSize, int ...NHiddenLayers>
+using output_batch_t = eig::Array<float, SampleSize, ann_output_len<NHiddenLayers...>::value, eig::RowMajor>;
 
 using OptimizerParams = std::unordered_map<std::string, std::any>;
 

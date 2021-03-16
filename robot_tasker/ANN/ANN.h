@@ -8,16 +8,16 @@
 #include "ANN_typedef.h"
 #include "ANN_activation.h"
 
-template<int InputSize, int ... LayerNodeConfig>
+template<int InputSize, int ... NHiddenLayers>
 struct ArtificialNeuralNetwork{
-  ANN::weights_t     <InputSize, LayerNodeConfig...>    weight;
-  ANN::bias_t        <LayerNodeConfig...>               bias;
-  ANN::activations_t <LayerNodeConfig...>               layer_activation_func;
-  ANN::layerConfig_t <InputSize, LayerNodeConfig...>    n_nodes;
-  int                                                   n_layers;
+  ANN::weights_t     <InputSize, NHiddenLayers...>    weight;
+  ANN::bias_t        <NHiddenLayers...>               bias;
+  ANN::activations_t <NHiddenLayers...>               layer_activation_func;
+  ANN::layerConfig_t <InputSize, NHiddenLayers...>    n_nodes;
+  int                                                 n_layers;
 
   ArtificialNeuralNetwork()
-  { this->set_layer_config(InputSize, LayerNodeConfig...); }
+  { this->set_layer_config(InputSize, NHiddenLayers...); }
 
   ~ArtificialNeuralNetwork(){}
 
@@ -58,11 +58,11 @@ struct ArtificialNeuralNetwork{
 };
 
 
-template<int InputSize, int ... LayerNodeConfig, typename EigenDerived>
-auto forward(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>& ann, const eig::ArrayBase<EigenDerived>& input)     
-  -> ANN::output_t<LayerNodeConfig...>
+template<int InputSize, int ... NHiddenLayers, typename EigenDerived>
+auto forward(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& ann, const eig::ArrayBase<EigenDerived>& input)     
+  -> ANN::output_t<NHiddenLayers...>
 {
-  constexpr int largest_layer_len = max_layer_len<InputSize, LayerNodeConfig...>::value;
+  constexpr int largest_layer_len = max_layer_len<InputSize, NHiddenLayers...>::value;
   eig::Array<float, eig::Dynamic, eig::Dynamic, 0, largest_layer_len, 1> prev_layer_activation;
   eig::Array<float, eig::Dynamic, eig::Dynamic, 0, largest_layer_len, 1> this_layer_activation;
 
@@ -91,16 +91,16 @@ auto forward(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>& ann, 
     bias_count     += n_nodes_cur_layer;
   }
 
-  ANN::output_t<LayerNodeConfig...> output = prev_layer_activation;
+  ANN::output_t<NHiddenLayers...> output = prev_layer_activation;
   return output;
 }
 
 
-template<int BatchSize, int InputSize, int ... LayerNodeConfig, typename EigenDerived>
-auto forward_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>& ann, const eig::ArrayBase<EigenDerived>& input)
-        -> ANN::output_batch_t<BatchSize, LayerNodeConfig...>
+template<int BatchSize, int InputSize, int ... NHiddenLayers, typename EigenDerived>
+auto forward_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& ann, const eig::ArrayBase<EigenDerived>& input)
+        -> ANN::output_batch_t<BatchSize, NHiddenLayers...>
 {
-  constexpr int largest_layer_len = max_layer_len<InputSize, LayerNodeConfig...>::value;
+  constexpr int largest_layer_len = max_layer_len<InputSize, NHiddenLayers...>::value;
   eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor, BatchSize, largest_layer_len> prev_layer_activation;
   eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor, BatchSize, largest_layer_len> this_layer_activation;
 
@@ -130,31 +130,35 @@ auto forward_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>&
     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
     bias_count     += n_nodes_cur_layer;
   }
-  ANN::output_batch_t<BatchSize, LayerNodeConfig...> output = prev_layer_activation;
+  ANN::output_batch_t<BatchSize, NHiddenLayers...> output = prev_layer_activation;
   return output;
 }
 
 
-template<int BatchSize, int InputSize, int ... LayerNodeConfig, typename EigenDerived1, typename EigenDerived2, 
+template<int BatchSize, int InputSize, int ... NHiddenLayers, typename EigenDerived1, typename EigenDerived2, 
          typename LossFcn_t, typename LossGradFcn_t>
-auto gradient_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>&  ann, 
-                    const eig::ArrayBase<EigenDerived1>&                           input,
-                    const eig::ArrayBase<EigenDerived2>&                           ref_out, 
-                          LossFcn_t&                                               loss_fcn,
-                          LossGradFcn_t&                                           loss_grad_fcn)
+auto gradient_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>&  ann, 
+                    const eig::ArrayBase<EigenDerived1>&                         input,
+                    const eig::ArrayBase<EigenDerived2>&                         ref_out, 
+                          LossFcn_t&                                             loss_fcn,
+                          LossGradFcn_t&                                         loss_grad_fcn)
 {
-  constexpr int output_len        = ann_output_len<LayerNodeConfig...>::value;
-  constexpr int n_layers          = pack_len<InputSize, LayerNodeConfig...>::value;
-  constexpr int largest_layer_len = max_layer_len<InputSize, LayerNodeConfig...>::value;
-  using weight_type = decltype(ann.weight);
-  using bias_type   = decltype(ann.bias);
+  constexpr int output_len        = ann_output_len<NHiddenLayers...>::value;
+  constexpr int n_layers          = pack_len<InputSize, NHiddenLayers...>::value;
+  constexpr int largest_layer_len = max_layer_len<InputSize, NHiddenLayers...>::value;
+  using weight_type      = decltype(ann.weight);
+  using bias_type        = decltype(ann.bias);
+  using Delta_t          = eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor, BatchSize, largest_layer_len>;
+  using Activation_t     = eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>;
 
-  // Perform forward propagation
-  vector<eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>> activations(n_layers);
   tuple<weight_type, bias_type> retval = std::make_tuple(weight_type{}, bias_type{});
   auto& [weight_grad, bias_grad] = retval;
-  
-  activations.emplace(activations.begin(), input);
+
+  // Perform forward propagation
+  vector<Activation_t> activations; 
+  activations.reserve(n_layers);
+  activations.emplace_back(input);
+
   int weights_count = 0;
   int bias_count    = 0;
   for (int layer = 1; layer <= ann.n_layers; layer++)
@@ -165,7 +169,7 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>
     int weights_end        = weights_start + (n_nodes_cur_layer*n_nodes_last_layer) - 1;
     
     auto b = ann.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1));
-    activations.emplace(activations.begin()+layer, BatchSize, n_nodes_cur_layer);
+    activations.emplace_back(BatchSize, n_nodes_cur_layer);
     for (int node = 0; node < n_nodes_cur_layer; node++)
     {
       // calculate wX + b
@@ -178,62 +182,35 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>
   }
 
   // perform backward propagation to calculate gradient
-  auto loss_grad = loss_grad_fcn(activations.back(), ref_out);
-
   // calculate delta for last layer
-  eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor, BatchSize, largest_layer_len> delta, 
-                                                                                          delta_to_here, 
-                                                                                          this_layer_activation_grad, 
-                                                                                          prev_layer_activations;
-  int n_nodes_this_layer = ann.n_nodes(last);
-  int n_nodes_prev_layer = ann.n_nodes(last-1);
+  Delta_t delta, delta_to_here(loss_grad_fcn(activations.back(), ref_out));
+  
+  int n_nodes_this_layer, n_nodes_prev_layer;
+  int weight_end, weight_start;
+  int bias_end, bias_start;
 
-  this_layer_activation_grad = ann.layer_activation_func.back().grad(activations.back());
-  prev_layer_activations     = activations[ann.n_layers-1];
-
-  delta.conservativeResize(NoChange, this_layer_activation_grad.cols());
-  delta_to_here.conservativeResize(NoChange, delta.cols());
-
-  delta = loss_grad*this_layer_activation_grad;
-  int weight_end   = (int)ann.weight.rows()-1;
-  int weight_start = weight_end - (n_nodes_this_layer*n_nodes_prev_layer) + 1;
-  int bias_end     = (int)ann.bias.rows()-1;
-  int bias_start   = bias_end - (n_nodes_this_layer) + 1;
-
-  for (int node = 0; node < n_nodes_this_layer; node++)
+  int next_layer_weights_end = 0, next_layer_weights_start = (int)ann.weight.rows();
+  int next_layer_bias_end = 0, next_layer_bias_start = (int)ann.bias.rows();
+  for (int layer = ann.n_layers; layer > 0; layer--)
   {
-    auto temp = delta(all, node);
-    for (int j = 0; j < n_nodes_prev_layer; j++)
-    {
-      auto weight_grad_list = temp*prev_layer_activations(all, j);
-      weight_grad(weight_start+(node*n_nodes_prev_layer)+j, 0) = weight_grad_list.mean();
-    }
-    bias_grad(bias_start+node, 0) = temp.mean();
-  }
-
-  // calculate gradient for remaining layers
-  delta_to_here.swap(delta);
-  int next_layer_weights_end   = weight_end;
-  int next_layer_weights_start = weight_start;
-  int next_layer_bias_end      = bias_end;
-  int next_layer_bias_start    = bias_start;
-  for (int layer = ann.n_layers-1; layer > 0; layer--)
-  {
-    n_nodes_this_layer         = ann.n_nodes[layer];
-    n_nodes_prev_layer         = ann.n_nodes[layer-1];
-    int n_nodes_next_layer     = ann.n_nodes[layer+1];
-    this_layer_activation_grad = ann.layer_activation_func[layer].grad(activations[layer]);
-    prev_layer_activations     = activations[layer-1];
-
-    delta.conservativeResize(NoChange, n_nodes_this_layer);
+    n_nodes_this_layer              = ann.n_nodes[layer];
+    n_nodes_prev_layer              = ann.n_nodes[layer-1];
+    auto this_layer_activation_grad = ann.layer_activation_func[layer-1].grad(activations[layer]);
+    auto& prev_layer_activations    = activations[layer-1];
 
     // calculate delta
-    for (int node = 0; node < n_nodes_this_layer; node++)
+    if (layer != ann.n_layers)
     {
-      delta(all, node) = delta_to_here.matrix()*ann.weight(seq(next_layer_weights_start+node, 
-                                                               next_layer_weights_end, 
-                                                               n_nodes_this_layer)).eval().matrix();
+      delta.conservativeResize(NoChange, n_nodes_this_layer);
+      for (int node = 0; node < n_nodes_this_layer; node++)
+      {
+        delta(all, node) = (delta_to_here.matrix()*ann.weight(seq(next_layer_weights_start+node, 
+                                                                  next_layer_weights_end, 
+                                                                  n_nodes_this_layer)).eval().matrix());
+      }
     }
+    else 
+    { delta.swap(delta_to_here); }
     delta *= this_layer_activation_grad;
 
     // calculate gradient
@@ -243,14 +220,14 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, LayerNodeConfig...>
     bias_start   = bias_end - n_nodes_this_layer + 1;
    for (int node = 0; node < n_nodes_this_layer; node++)
    {
+      auto temp = delta(all, node);
       for (int j = 0; j < n_nodes_prev_layer; j++)
       {
-        auto temp = delta(all, node)*prev_layer_activations(all, j);
-        weight_grad(weight_start+(node*n_nodes_prev_layer)+j) = temp.mean();
+        auto weight_grad_list = temp*prev_layer_activations(all, j);
+        weight_grad(weight_start+(node*n_nodes_prev_layer)+j) = weight_grad_list.mean();
       }
-      bias_grad(bias_start+node) = delta(all, node).mean();
+      bias_grad(bias_start+node) = temp.mean();
    }
-
     delta_to_here.swap(delta);
 
     next_layer_weights_end   = weight_end;

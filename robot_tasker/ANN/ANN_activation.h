@@ -101,7 +101,7 @@ class Activation{
       {
         case SIGMOID:
         {
-          auto retval_expr = 1.0F/(1.0F + eig::exp(wx_b));
+          auto retval_expr = 1.0F/(1.0F + eig::exp(-wx_b));
           retval = retval_expr.eval();
           break;
         }
@@ -127,7 +127,7 @@ class Activation{
       {
         case SIGMOID:
         {
-          retval  = 1.0F/(1.0F + std::expf(wx_b));
+          retval  = 1.0F/(1.0F + std::expf(-wx_b));
           break;
         }
         case RELU:
