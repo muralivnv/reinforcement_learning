@@ -151,11 +151,8 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
                         Activation(SIGMOID, XAVIER));
   target_critic = sampling_critic;
 
-  OptimizerParams actor_opt;
-  actor_opt["step_size"] = 1e-3F;
-
-  OptimizerParams critic_opt;
-  critic_opt["step_size"] = 1e-4f;
+  AdamOptimizer actor_opt(sampling_actor.weights.rows(), sampling_actor.bias.rows(), 1e-3F);
+  AdamOptimizer critic_opt(sampling_critic.weights.rows(), sampling_critic.bias.rows(), 1e-3F);
   
   float soft_update_rate = 0.95F;
   while (episode_count < max_episodes)
@@ -217,10 +214,10 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
                                                                                        Q_target, 
                                                                                        critic_loss,
                                                                                        critic_loss_grad<batch_size>);
-        steepest_descent(critic_weight_grad, critic_bias_grad, critic_opt, sampling_critic);
+        critic_opt.step(critic_weight_grad, critic_bias_grad, sampling_critic.weight, sampling_critic.bias);
 
         // calculate loss for sampling_actor network and perform optimization step
-
+        
         // soft-update target networks parameters
         target_actor.weight *= soft_update_rate;
         target_actor.weight += (1.0F - soft_update_rate)*sampling_actor.weight;
