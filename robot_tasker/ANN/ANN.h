@@ -139,7 +139,8 @@ template<int BatchSize, int InputSize, int ... NHiddenLayers, typename EigenDeri
          typename LossFcn_t, typename LossGradFcn_t>
 auto gradient_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>&  ann, 
                     const eig::ArrayBase<EigenDerived1>&                         input,
-                    const eig::ArrayBase<EigenDerived2>&                         ref_out, 
+                    const eig::ArrayBase<EigenDerived2>&                         ref_out,
+                          LossFcn_t&                                             loss_fcn, 
                           LossGradFcn_t&                                         loss_grad_fcn)
 {
   constexpr int output_len        = ann_output_len<NHiddenLayers...>::value;
@@ -150,8 +151,8 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& 
   using Delta_t          = eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor, BatchSize, largest_layer_len>;
   using Activation_t     = eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>;
 
-  tuple<weight_type, bias_type> retval = std::make_tuple(weight_type{}, bias_type{});
-  auto& [weight_grad, bias_grad] = retval;
+  tuple<float, weight_type, bias_type> retval = std::make_tuple(0.0F, weight_type{}, bias_type{});
+  auto& [loss, weight_grad, bias_grad] = retval;
 
   // Perform forward propagation
   vector<Activation_t> activations; 
@@ -179,6 +180,8 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& 
     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
     bias_count     += n_nodes_cur_layer;
   }
+  // calculate loss
+  loss = loss_fcn(activations.back(), ref_out);
 
   // perform backward propagation to calculate gradient
   // calculate delta for last layer

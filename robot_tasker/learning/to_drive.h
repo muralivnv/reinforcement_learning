@@ -93,8 +93,21 @@ critic_loss_grad(const eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMaj
   return retval;
 }
 
-// TODO: Output of this function should be a policy
-void learn_to_drive(const RL::GlobalConfig_t& global_config)
+bool is_robot_inside_world(const RL::DifferentialRobotState& state,
+                           const RL::GlobalConfig_t&         global_config)
+{
+  static const float& world_max_x = global_config.at("world/size/x"); 
+  static const float& world_max_y = global_config.at("world/size/y"); 
+
+  if (   (state.x > 0.0F) && (state.x < world_max_x)
+      && (state.y > 0.0F) && (state.y < world_max_y) )
+  {
+    return true;
+  }
+  return false;
+}
+
+auto learn_to_drive(const RL::GlobalConfig_t& global_config)
 {
   static const float& world_max_x = global_config.at("world/size/x"); 
   static const float& world_max_y = global_config.at("world/size/y"); 
@@ -139,11 +152,12 @@ void learn_to_drive(const RL::GlobalConfig_t& global_config)
   target_critic = sampling_critic;
 
   OptimizerParams actor_opt;
-  OptimizerParams critic_opt;
-
   actor_opt["step_size"] = 1e-3F;
-  critic_opt["step_size"] = 1e-4f;
 
+  OptimizerParams critic_opt;
+  critic_opt["step_size"] = 1e-4f;
+  
+  float soft_update_rate = 0.95F;
   while (episode_count < max_episodes)
   {
     auto [current_state, target_state] = reset_states(pose_x_sample, pose_y_sample, heading_sample, rand_gen);
@@ -198,19 +212,28 @@ void learn_to_drive(const RL::GlobalConfig_t& global_config)
         Q_target += replay_buffer(n_transitions, r);
 
         // calculate loss between Q_target, Q_sampling and perform optimization step
-        auto [critic_weight_grad, critic_bias_grad] = gradient_batch<batch_size>(sampling_critic, 
-                                                                                 replay_buffer(n_transitions, {s0, s1, a0, a1}, 
-                                                                                 Q_target, 
-                                                                                 critic_loss_grad<batch_size>);
+        auto [loss, critic_weight_grad, critic_bias_grad] = gradient_batch<batch_size>(sampling_critic, 
+                                                                                       replay_buffer(n_transitions, {s0, s1, a0, a1}, 
+                                                                                       Q_target, 
+                                                                                       critic_loss,
+                                                                                       critic_loss_grad<batch_size>);
         steepest_descent(critic_weight_grad, critic_bias_grad, critic_opt, sampling_critic);
 
         // calculate loss for sampling_actor network and perform optimization step
 
         // soft-update target networks parameters
+        target_actor.weight *= soft_update_rate;
+        target_actor.weight += (1.0F - soft_update_rate)*sampling_actor.weight;
 
+        target_critic.bias *= soft_update_rate;
+        target_critic.bias += (1.0F - soft_update_rate)*sampling_critic.bias;
       }
+
+      robot_state_inside_world = is_robot_inside_world(state, global_config);
     }
   }
+
+  std::make_tuple(target_actor, target_critic);
 }
 
 #endif
