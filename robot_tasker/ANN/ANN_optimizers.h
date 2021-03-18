@@ -9,24 +9,18 @@
 #include "ANN.h"
 
 template<int BatchSize, int InputSize, int ...LayerNodeCondfig, typename EigenDerived1, typename EigenDerived2>
-void steepest_descent(const eig::DenseBase<EigenDerived1>& input, 
-                      const eig::DenseBase<EigenDerived2>& ref_out,
+void steepest_descent(const eig::ArrayBase<EigenDerived1>& weight_grad, 
+                      const eig::ArrayBase<EigenDerived2>& bias_grad,
                       const ANN::OptimizerParams&          params,
-                            ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& ann)
+                            ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& network)
 {
-  static const size_t n_epochs    = std::any_cast<size_t>(params.at("n_epochs"));
-  static const float step_size    = std::any_cast<float>(params.at("step_size"));
-
-  for (size_t epoch = 0u; epoch < n_epochs; epoch++)
-  {
-    // calculate gradient of weight and bias
-    auto [weight_grad, bias_grad] = gradient_batch(ann, input, ref_out);
+  static const float& step_size    = std::any_cast<float>(params.at("step_size"));
 
     // update weights
-    ann.weight -= (step_size*weight_grad); 
+    network.weight -= (step_size*weight_grad); 
     
     // update bias
-    ann.bias   -= (step_size*bias_grad);
+    network.bias   -= (step_size*bias_grad);
   }
 }
 

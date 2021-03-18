@@ -140,7 +140,6 @@ template<int BatchSize, int InputSize, int ... NHiddenLayers, typename EigenDeri
 auto gradient_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>&  ann, 
                     const eig::ArrayBase<EigenDerived1>&                         input,
                     const eig::ArrayBase<EigenDerived2>&                         ref_out, 
-                          LossFcn_t&                                             loss_fcn,
                           LossGradFcn_t&                                         loss_grad_fcn)
 {
   constexpr int output_len        = ann_output_len<NHiddenLayers...>::value;

@@ -5,7 +5,10 @@
 #include <algorithm>
 
 #include "../global_typedef.h"
+#include "../ANN/ANN_typedef.h"
 #include "../ANN/ANN.h"
+#include "../ANN/ANN_optimizers.h"
+
 #include "../util.h"
 
 #include "robot_dynamics.h"
@@ -30,7 +33,7 @@ float calc_reward(const RL::DifferentialState& state_error)
 auto calc_error(const RL::DifferentialState& current_state, 
                 const RL::DifferentialState& target_state)
 {
-  auto state_error = current_state - target_state;
+  auto state_error    = current_state - target_state;
   float pose_error    = std::sqrtf( (state_error.x*state_error.x) + (state_error.y*state_error.y) );
   float heading_error = state_error.psi;
 
@@ -54,114 +57,158 @@ std::array<int, N> get_n_shuffled_idx(const int container_size)
   return shuffled_n_idx;
 }
 
+auto reset_states(std::uniform_real_distribution& pose_x_sample, 
+                  std::uniform_real_distribution& pose_y_sample, 
+                  std::uniform_real_distribution& heading_sample, 
+                  std::mt19937&                   gen)
+{
+  RL::DifferentialRobotState initial_state, final_state;
+  initial_state.x = pose_x_sample(gen);
+  initial_state.y = pose_y_sample(gen);
+  initial_state.phi = heading_sample(gen);
+
+  final_state.x = pose_x_sample(gen);
+  final_state.y = pose_y_sample(gen);
+  final_state.phi = heading_sample(gen);
+
+  return std::make_tuple(initial_state, final_state);
+}
+
+template<typename EigenDerived1, typename EigenDerived2>
+float critic_loss(const eig::ArrayBase<EigenDerived1>& Q_sampling, 
+                  const eig::ArrayBase<EigenDerived2>& Q_target)
+{
+  float loss = -0.5F*((Q_sampling - Q_target).square()).mean();
+  return loss;
+}
+
+template<int BatchSize>
+eig::Array<float, BatchSize, 1, eig::RowMajor>
+critic_loss_grad(const eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>& Q_sampling, 
+                 const eig::Array<float, BatchSize, 1, eig::RowMajor>& Q_target)
+{
+  // Loss = -(0.5/BatchSize)*Sum( Square(Q_sampling - Q_target) )
+
+  eig::Array<float, BatchSize, OutputSize, eig::RowMajor> retval = (Q_target - Q_sampling);
+  return retval;
+}
+
 // TODO: Output of this function should be a policy
-auto learn_to_drive(const RL::GlobalConfig_t& global_config)
+void learn_to_drive(const RL::GlobalConfig_t& global_config)
 {
   static const float& world_max_x = global_config.at("world/size/x"); 
   static const float& world_max_y = global_config.at("world/size/y"); 
   static const float& action1_max = global_config.at("robot/max_wheel_speed");
   static const float& action2_max = global_config.at("robot/max_wheel_speed");
+  const float& dt = global_config.at("cycle_time");
+  const int s0 = 0;
+  const int s1 = 1;
+  const int a0 = 2;
+  const int a1 = 3;
+  const int r  = 4;
+  const int next_s0 = 5;
+  const int next_s1 = 6;
 
   std::random_device seed;
   std::mt19937 rand_gen(seed());
-  std::uniform_real_distribution world_x(0, world_max_x);
-  std::uniform_real_distribution world_y(0, world_max_y);
-  std::uniform_real_distribution heading(-PI, PI);
-  
-  // Deep deterministic policy gradient
-  ArtificialNeuralNetwork<2, 3, 5, 2> sampling_policy, target_policy;
-  ArtificialNeuralNetwork<4, 5, 7, 1> sampling_action_value, target_action_value;
+  std::uniform_real_distribution pose_x_sample(0, world_max_x);
+  std::uniform_real_distribution pose_y_sample(0, world_max_y);
+  std::uniform_real_distribution heading_sample(-PI, PI);
 
-  sampling_policy.dense(Activation(RELU, HE), 
+  constexpr size_t batch_size   = 256u;
+  constexpr size_t max_episodes = 100u;
+  constexpr size_t replay_buffer_size = 1000u;
+
+  eig::<float, eig::Dynamic, 7, eig::RowMajor, replay_buffer_size> replay_buffer;
+  int replay_buffer_len = -1;
+  size_t episode_count  = 0u; 
+  std::normal_distribution<float> exploration_noise(0.0F, 0.1F);
+
+  // Deep deterministic policy gradient
+  ArtificialNeuralNetwork<2, 3, 5, 2> sampling_actor, target_actor;
+  ArtificialNeuralNetwork<4, 5, 7, 1> sampling_critic, target_critic;
+
+  sampling_actor.dense(Activation(RELU, HE), 
                         Activation(RELU, HE), 
                         Activation(SIGMOID, XAVIER));
-  target_policy.dense(Activation(RELU, HE), 
-                      Activation(RELU, HE), 
-                      Activation(SIGMOID, XAVIER));
+  target_actor = sampling_actor;
   
-  sampling_action_value.dense(Activation(RELU, HE), 
-                              Activation(RELU, HE), 
-                              Activation(SIGMOID, XAVIER));
-  target_action_value.dense(Activation(RELU, HE), 
-                            Activation(RELU, HE), 
-                            Activation(SIGMOID, XAVIER));
+  sampling_critic.dense(Activation(RELU, HE), 
+                        Activation(RELU, HE), 
+                        Activation(SIGMOID, XAVIER));
+  target_critic = sampling_critic;
 
-  eig::<float, 50, 7, eig::RowMajor> replay_buffer;
-  int replay_buffer_len = -1;
-  size_t max_episodes = 50u, episode_count = 0u;
-  std::normal_distribution<float> exploration_noise(0.0F, 0.1F);
+  OptimizerParams actor_opt;
+  OptimizerParams critic_opt;
+
+  actor_opt["step_size"] = 1e-3F;
+  critic_opt["step_size"] = 1e-4f;
 
   while (episode_count < max_episodes)
   {
-    RL::DifferentialRobotState current_state, target_state;
-    current_state.x   = world_x(rand_gen);
-    current_state.y   = world_y(rand_gen);
-    current_state.psi = heading(rand_gen);
-    target_state.x    = world_x(rand_gen);
-    target_state.y    = world_y(rand_gen);
-    target_state.psi  = heading(rand_gen);
+    auto [current_state, target_state] = reset_states(pose_x_sample, pose_y_sample, heading_sample, rand_gen);
 
-    eig::Array<float, 1, 2, eig::RowMajor> policy_state;
-    eig::Array<float, 1, 2, eig::RowMajor> policy_action;
-    eig::Array<float, 1, 2, eig::RowMajor> transitioned_state;
-    int warm_up_cycles = 25;
-    float transition_reward;
+    eig::Array<float, 1, 2, eig::RowMajor> state;
+    eig::Array<float, 1, 2, eig::RowMajor> action;
+    float reward;
+    eig::Array<float, 1, 2, eig::RowMajor> next_state;
 
-    bool reach_to_target = true;
-    size_t current_cycle = 0u;
-    while(reach_to_target)
+    bool robot_state_inside_world = true;
+    size_t current_cycle          = 0u;
+    while(robot_state_inside_world)
     {
       // select action based on the currrent state of the robot
-      [policy_state(0, 0), policy_state(0, 1)] = calc_error(current_state, target_state);
-      policy_action  = forward_batch<1>(sampling_policy, policy_state);
-      policy_action += exploration_noise(rand_gen);
+      [state(0, 0), state(0, 1)] = calc_error(current_state, target_state);
+      action  = forward_batch<1>(sampling_actor, state);
+      action += exploration_noise(rand_gen);
 
       // execute the action and observe next state, reward
-      auto next_state = differential_robot(current_state, 
-                                           {policy_action(0, 0), policy_action(0, 1)}, 0.04F);
+      auto state_projected = differential_robot(current_state, 
+                                               {action(0, 0), action(0, 1)}, dt);
 
-      [transitioned_state(0, 0), transitioned_state(0, 1)] = calc_error(next_state, target_state);
-      transition_reward = calc_reward(next_state - target_state);
+      [next_state(0, 0), next_state(0, 1)] = calc_error(state_projected, target_state);
+      reward = calc_reward(state_projected - target_state);
 
       // store current transition -> S_t, A_t, R_t, S_{t+1} in replay buffer
       replay_buffer_len++;
-      replay_buffer_len %= (replay_buffer.rows());
-      replay_buffer(replay_buffer_len, 0) = policy_state(0, 0);
-      replay_buffer(replay_buffer_len, 1) = policy_state(0, 1);
-      replay_buffer(replay_buffer_len, 2) = policy_action(0, 0);
-      replay_buffer(replay_buffer_len, 3) = policy_action(0, 1);
-      replay_buffer(replay_buffer_len, 4) = transition_reward;
-      replay_buffer(replay_buffer_len, 5) = transitioned_state(0, 0);
-      replay_buffer(replay_buffer_len, 6) = transitioned_state(0, 1);
+      replay_buffer_len %= replay_buffer_size;
+      if (replay_buffer.rows() < replay_buffer_len)
+      { replay_buffer.conservativeResize(replay_buffer_len+1, NoChange); }
+      replay_buffer(replay_buffer_len, {s0, s1})           = state;
+      replay_buffer(replay_buffer_len, {a0, a1})           = action;
+      replay_buffer(replay_buffer_len, r)                  = reward;
+      replay_buffer(replay_buffer_len, {next_s0, next_s1}) = next_state;
 
-      if (current_cycle > warm_up_cycles)
+      state = next_state;
+      current_cycle++;
+
+      if (current_cycle >= batch_size)
       {
         // Sample 'N' transitions from replay buffer to do mini-batch param optimization
-        auto n_transitions = get_n_shuffled_idx<25>(replay_buffer.rows()); // TODO: fix size issue
+        auto n_transitions = get_n_shuffled_idx<batch_size>(replay_buffer.rows());
 
-        eig::Array<float, 25, 1> G_target_policy;
-        eig::Array<float, 25, 1> G_sampling_policy;
-        eig::Array<float, 25, 4> action_value_input;
+        eig::Array<float, batch_size, 1> Q_target;
+        eig::Array<float, batch_size, 4, eig::RowMajor> target_critic_input;
 
-        auto target_action = forward_batch<25>(target_policy, replay_buffer(n_transitions, seq(5, 6)));
-        action_value_input(all, seq(0, 1)) = replay_buffer(n_transitions, seq(5, 6));
-        action_value_input(all, seq(2, 3)) = target_action;
-        G_target_policy = forward_batch<25>(target_action_value, action_value_input);
-        G_target_policy = replay_buffer(n_transitions, 4) + discount_factor*(G_target_policy);
+        target_critic_input(all, {s0, s1}) = replay_buffer(n_transitions, {next_s0, next_s1});
+        target_critic_input(all, {a0, a1}) = forward_batch<batch_size>(target_actor, target_critic_input(all, {s0, s1}) );
 
-        G_sampling_policy = forward_batch<25>(sampling_action_value, replay_buffer(n_transitions, seq(0, 3)));
+        Q_target  = forward_batch<batch_size>(target_critic, target_critic_input);
+        Q_target *= discount_factor; // TODO: define this
+        Q_target += replay_buffer(n_transitions, r);
 
-        // calculate loss between G_target_policy and G_sampling_policy
+        // calculate loss between Q_target, Q_sampling and perform optimization step
+        auto [critic_weight_grad, critic_bias_grad] = gradient_batch<batch_size>(sampling_critic, 
+                                                                                 replay_buffer(n_transitions, {s0, s1, a0, a1}, 
+                                                                                 Q_target, 
+                                                                                 critic_loss_grad<batch_size>);
+        steepest_descent(critic_weight_grad, critic_bias_grad, critic_opt, sampling_critic);
 
-        // calculate loss for sampling_policy network
+        // calculate loss for sampling_actor network and perform optimization step
 
-        // update sampling_policy parameters
+        // soft-update target networks parameters
 
-        // update sampling_action_value parameters
-
-        // update target networks parameters
       }
-      current_cycle++;
     }
   }
 }
