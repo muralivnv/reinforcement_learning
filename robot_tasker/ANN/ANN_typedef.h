@@ -12,6 +12,15 @@
 namespace ANN
 {
 
+template<int OutputLen>
+constexpr int storage_order()
+{
+  if constexpr (OutputLen == 1)
+  { return eig::ColMajor; }
+  else 
+  { return eig::RowMajor; }
+}
+
 template<int InputSize, int ... NHiddenLayers>
 using weights_t = eig::Array<float, ann_weights_len<InputSize, NHiddenLayers...>::value, 1>;
 
@@ -34,7 +43,7 @@ template<int ...NHiddenLayers>
 using output_t = eig::Array<float, ann_output_len<NHiddenLayers...>::value, 1>;
 
 template<int SampleSize, int ...NHiddenLayers>
-using output_batch_t = eig::Array<float, SampleSize, ann_output_len<NHiddenLayers...>::value, eig::RowMajor>;
+using output_batch_t = eig::Array<float, SampleSize, ann_output_len<NHiddenLayers...>::value, storage_order<ann_output_len<NHiddenLayers...>::value>()>;//eig::RowMajor>;
 
 using OptimizerParams = std::unordered_map<std::string, std::any>;
 

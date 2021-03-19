@@ -13,9 +13,9 @@ namespace ANN
   
 class SteepestDescentOptimizer{
   private:
-    float step_size_ = 1e-3F;
+    float step_size_;
   public:
-    SteepestDescent(float step_size)
+    SteepestDescentOptimizer(float step_size=1e-3F)
     { step_size_ = step_size; }
 
     template<typename EigenDerived1, typename EigenDerived2, typename EigenDerived3, typename EigenDerived4>
@@ -45,14 +45,14 @@ class AdamOptimizer{
     AdamOptimizer(int n_weights, int n_bias, float step_size=1e-3F, float momentum_step=0.90F, float grad_sq_step=0.99F)
     {
       dw_momentum_.resize(n_weights);
-      db_momentum_.resize(b_weights);
+      db_momentum_.resize(n_bias);
 
       dw_sq_.resize(n_weights);
       db_sq_.resize(n_bias);
 
       step_size_     = step_size;
       momentum_step_ = momentum_step;
-      grad_sq_step_  = grad_sq_step
+      grad_sq_step_  = grad_sq_step;
       
       optim_counter_  = 0u;
     }
@@ -72,8 +72,8 @@ class AdamOptimizer{
         db_momentum_ = bias_grad;
 
         // initialize uncentered 2nd moment of gradient
-        dw_grad_sq_ = weights_grad.square();
-        db_grad_sq_ = bias_grad.square();
+        dw_sq_ = weights_grad.square();
+        db_sq_ = bias_grad.square();
       }
       else 
       {
@@ -103,7 +103,7 @@ class AdamOptimizer{
       auto db_sq_corrected        = db_sq_*grad_sq_bias_correction;
 
       auto delta_w = (step_size_*dw_momentum_corrected)/(eig::sqrt(dw_sq_corrected + 1e-8F));
-      auto delta_b = (step_size*db_momentum_corrected)/(eig::sqrt(db_sq_corrected  + 1e-8F));
+      auto delta_b = (step_size_*db_momentum_corrected)/(eig::sqrt(db_sq_corrected  + 1e-8F));
 
       // update parameters
       weights -= delta_w;
