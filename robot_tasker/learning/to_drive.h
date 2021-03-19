@@ -74,8 +74,24 @@ auto reset_states(std::uniform_real_distribution<float>& pose_x_sample,
   return std::make_tuple(initial_state, final_state);
 }
 
-float critic_loss(const eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>& Q_sampling, 
-                  const eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>& Q_target)
+float actor_loss(const eig::Array<float, eig::Dynamic, 1>& reward)
+{
+  float loss = -reward.mean();
+
+  return loss;
+}
+
+eig::Array<float, eig::Dynamic, 1>
+actor_loss_grad(const eig::Array<float, eig::Dynamic, 1>& reward)
+{
+  UNUSED(reward);
+  eig::Array<float, eig::Dynamic, 1> retval(reward.rows(), 1);
+  retval.fill(-1.0F);
+  return retval;
+}
+
+float critic_loss(const eig::Array<float, eig::Dynamic, 1>& Q_sampling, 
+                  const eig::Array<float, eig::Dynamic, 1>& Q_target)
 {
   float loss = -0.5F*((Q_sampling - Q_target).square()).mean();
   return loss;
@@ -106,112 +122,179 @@ bool is_robot_inside_world(const RL::DifferentialRobotState& state,
 }
 
 
-// template<int BatchSize, 
-//         int ActorInputSize,  int ... ActorNHiddenLayers, 
-//         int CriticInputSize, int... CriticNHiddenLayers, 
-//         typename EigenDerived, typename LossFcn_t, typename LossGradFcn_t>
-// auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHiddenLayers...>&   actor_network,
-//                           const ArtificialNeuralNetwork<CriticInputSize, CriticNHiddenLayers...>& critic_network,
-//                           const eig::ArrayBase<EigenDerived>&                         input,
-//                                 LossFcn_t&                                             loss_fcn, 
-//                                 LossGradFcn_t&                                         loss_grad_fcn)
-// {
-//   constexpr int output_len        = ann_output_len<NHiddenLayers...>::value;
-//   constexpr int n_layers          = pack_len<InputSize, NHiddenLayers...>::value;
-//   constexpr int largest_layer_len = max_layer_len<InputSize, NHiddenLayers...>::value;
-//   using weight_type      = decltype(ann.weight);
-//   using bias_type        = decltype(ann.bias);
-//   using Delta_t          = eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor, BatchSize, largest_layer_len>;
-//   using Activation_t     = eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>;
+template<int BatchSize, 
+        int ActorInputSize,  int ... ActorNHiddenLayers, 
+        int CriticInputSize, int... CriticNHiddenLayers, 
+        typename EigenDerived, typename LossFcn_t, typename LossGradFcn_t>
+auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHiddenLayers ...>&   actor_network,
+                          const ArtificialNeuralNetwork<CriticInputSize, CriticNHiddenLayers ...>& critic_network,
+                          const eig::ArrayBase<EigenDerived>&                                     input,
+                                LossFcn_t&                                                        loss_fcn, 
+                                LossGradFcn_t&                                                    loss_grad_fcn)
+{
+  constexpr int output_len        = ann_output_len<ActorNHiddenLayers ...>::value;
+  constexpr int actor_n_layers    = pack_len<ActorInputSize, ActorNHiddenLayers ...>::value;
+  constexpr int critic_n_layers   = pack_len<CriticInputSize, CriticNHiddenLayers ...>::value;
+  constexpr int largest_layer_len = max_layer_len<ActorInputSize, ActorNHiddenLayers ..., CriticInputSize, CriticNHiddenLayers ...>::value;
+  using weight_type   = decltype(actor_network.weight);
+  using bias_type     = decltype(actor_network.bias);
+  using Delta_t       = eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor, BatchSize, largest_layer_len>;
+  using Activation_t  = eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>;
 
-//   tuple<float, weight_type, bias_type> retval = std::make_tuple(0.0F, weight_type{}, bias_type{});
-//   auto& [loss, weight_grad, bias_grad] = retval;
+  tuple<float, weight_type, bias_type> retval = std::make_tuple(0.0F, weight_type{}, bias_type{});
+  auto& [loss, weight_grad, bias_grad] = retval;
 
-//   // Perform forward propagation
-//   vector<Activation_t> activations; 
-//   activations.reserve(n_layers);
-//   activations.emplace_back(input);
+  // Perform forward propagation
+  vector<Activation_t> actor_activations, critic_activations;
+  actor_activations.reserve(actor_n_layers);
+  critic_activations.reserve(critic_n_layers);
+  critic_activations.emplace_back(input);
+  actor_activations.emplace_back(input(all, {0, 1}));
 
-//   int weights_count = 0;
-//   int bias_count    = 0;
-//   for (int layer = 1; layer <= ann.n_layers; layer++)
-//   {
-//     int n_nodes_last_layer = ann.n_nodes(layer-1);
-//     int n_nodes_cur_layer  = ann.n_nodes(layer);
-//     int weights_start      = weights_count;
-//     int weights_end        = weights_start + (n_nodes_cur_layer*n_nodes_last_layer) - 1;
+  // calculate and store activations at each layer for actor_network
+  int weights_count = 0;
+  int bias_count    = 0;
+  for (int layer = 1; layer <= actor_network.n_layers; layer++)
+  {
+    int n_nodes_last_layer = actor_network.n_nodes(layer-1);
+    int n_nodes_cur_layer  = actor_network.n_nodes(layer);
+    int weights_start      = weights_count;
+    int weights_end        = weights_start + (n_nodes_cur_layer*n_nodes_last_layer) - 1;
     
-//     auto b = ann.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1));
-//     activations.emplace_back(BatchSize, n_nodes_cur_layer);
-//     for (int node = 0; node < n_nodes_cur_layer; node++)
-//     {
-//       // calculate wX + b
-//       auto w  = ann.weight(seq(weights_start+node, weights_end, n_nodes_cur_layer)).eval();
-//       auto wx = (activations[layer-1].matrix() * w.matrix());
-//       activations[layer](all, node) = ann.layer_activation_func[layer-1].activation_batch( (wx.array() + b(node)) );
-//     }
-//     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
-//     bias_count     += n_nodes_cur_layer;
-//   }
-//   // calculate loss
-//   loss = loss_fcn(activations.back(), ref_out);
+    auto b = actor_network.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1));
+    actor_activations.emplace_back(BatchSize, n_nodes_cur_layer);
+    for (int node = 0; node < n_nodes_cur_layer; node++)
+    {
+      // calculate wX + b
+      auto w  = actor_network.weight(seq(weights_start+node, weights_end, n_nodes_cur_layer)).eval();
+      auto wx = (actor_activations[layer-1].matrix() * w.matrix());
+      actor_activations[layer](all, node) = actor_network.layer_activation_func[layer-1].activation_batch( (wx.array() + b(node)) );
+    }
+    weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
+    bias_count     += n_nodes_cur_layer;
+  }
 
-//   // perform backward propagation to calculate gradient
-//   // calculate delta for last layer
-//   Delta_t delta, delta_to_here(loss_grad_fcn(activations.back(), ref_out));
+  // calculate and store activations at each layer for critic_network
+  weights_count = 0;
+  bias_count    = 0;
+  for (int layer = 1; layer <= critic_network.n_layers; layer++)
+  {
+    int n_nodes_last_layer = critic_network.n_nodes(layer-1);
+    int n_nodes_cur_layer  = critic_network.n_nodes(layer);
+    int weights_start      = weights_count;
+    int weights_end        = weights_start + (n_nodes_cur_layer*n_nodes_last_layer) - 1;
+    
+    auto b = critic_network.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1));
+    critic_activations.emplace_back(BatchSize, n_nodes_cur_layer);
+    for (int node = 0; node < n_nodes_cur_layer; node++)
+    {
+      // calculate wX + b
+      auto w  = critic_network.weight(seq(weights_start+node, weights_end, n_nodes_cur_layer)).eval();
+      auto wx = (critic_activations[layer-1].matrix() * w.matrix());
+      critic_activations[layer](all, node) = critic_network.layer_activation_func[layer-1].activation_batch( (wx.array() + b(node)) );
+    }
+    weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
+    bias_count     += n_nodes_cur_layer;
+  }
+
+  // calculate loss for the actor
+  loss = loss_fcn(critic_activations.back());
+
+  // perform backward propagation to calculate gradient
+  // calculate delta for last layer
+  Delta_t delta, delta_to_here(loss_grad_fcn(critic_activations.back()));
   
-//   int n_nodes_this_layer, n_nodes_prev_layer;
-//   int weight_end, weight_start;
-//   int bias_end, bias_start;
+  int n_nodes_this_layer, n_nodes_prev_layer;
+  int weight_end, weight_start;
+  int bias_end, bias_start;
 
-//   int next_layer_weights_end = 0, next_layer_weights_start = (int)ann.weight.rows();
-//   int next_layer_bias_end = 0, next_layer_bias_start = (int)ann.bias.rows();
-//   for (int layer = ann.n_layers; layer != 0; layer--)
-//   {
-//     n_nodes_this_layer              = ann.n_nodes[layer];
-//     n_nodes_prev_layer              = ann.n_nodes[layer-1];
-//     auto this_layer_activation_grad = ann.layer_activation_func[layer-1].grad(activations[layer]);
-//     auto& prev_layer_activations    = activations[layer-1];
+  int next_layer_weights_end = 0, next_layer_weights_start = (int)critic_network.weight.rows();
+  int next_layer_bias_end = 0, next_layer_bias_start = (int)critic_network.bias.rows();
+  for (int layer = critic_network.n_layers; layer != 0; layer--)
+  {
+    n_nodes_this_layer              = critic_network.n_nodes[layer];
+    n_nodes_prev_layer              = critic_network.n_nodes[layer-1];
+    auto this_layer_activation_grad = critic_network.layer_activation_func[layer-1].grad(critic_activations[layer]);
+    auto& prev_layer_activations    = critic_activations[layer-1];
 
-//     // calculate delta
-//     if (layer != ann.n_layers)
-//     {
-//       delta.conservativeResize(NoChange, n_nodes_this_layer);
-//       for (int node = 0; node < n_nodes_this_layer; node++)
-//       {
-//         delta(all, node) = (delta_to_here.matrix()*ann.weight(seq(next_layer_weights_start+node, 
-//                                                                   next_layer_weights_end, 
-//                                                                   n_nodes_this_layer)).eval().matrix());
-//       }
-//     }
-//     else 
-//     { delta.swap(delta_to_here); }
-//     delta *= this_layer_activation_grad;
+    // calculate delta
+    if (layer != critic_network.n_layers)
+    {
+      delta.conservativeResize(NoChange, n_nodes_this_layer);
+      for (int node = 0; node < n_nodes_this_layer; node++)
+      {
+        delta(all, node) = (delta_to_here.matrix()*critic_network.weight(seq(next_layer_weights_start+node, 
+                                                                             next_layer_weights_end, 
+                                                                             n_nodes_this_layer)).eval().matrix());
+      }
+    }
+    else 
+    { delta.swap(delta_to_here); }
+    delta *= this_layer_activation_grad;
+    delta_to_here.swap(delta);
 
-//     // calculate gradient
-//     weight_end   = next_layer_weights_start - 1;
-//     weight_start = weight_end - (n_nodes_this_layer*n_nodes_prev_layer) + 1;
-//     bias_end     = next_layer_bias_start - 1;
-//     bias_start   = bias_end - n_nodes_this_layer + 1;
-//    for (int node = 0; node < n_nodes_this_layer; node++)
-//    {
-//       auto temp = delta(all, node);
-//       for (int j = 0; j < n_nodes_prev_layer; j++)
-//       {
-//         auto weight_grad_list = temp*prev_layer_activations(all, j);
-//         weight_grad(weight_start+(node*n_nodes_prev_layer)+j) = weight_grad_list.mean();
-//       }
-//       bias_grad(bias_start+node) = temp.mean();
-//    }
-//     delta_to_here.swap(delta);
+    weight_end   = next_layer_weights_start - 1;
+    weight_start = weight_end - (n_nodes_this_layer*n_nodes_prev_layer) + 1;
+    bias_end     = next_layer_bias_start - 1;
+    bias_start   = bias_end - n_nodes_this_layer + 1;
 
-//     next_layer_weights_end   = weight_end;
-//     next_layer_weights_start = weight_start;
-//     next_layer_bias_start    = bias_start;
-//     next_layer_bias_end      = bias_end;
-//   }
-//   return retval;
-// }
+    next_layer_weights_end   = weight_end;
+    next_layer_weights_start = weight_start;
+    next_layer_bias_start    = bias_start;
+    next_layer_bias_end      = bias_end;
+  }
+
+  // calculate gradient for the actor_network
+  delta_to_here = delta_to_here(all, {2, 3}); // only take gradient with respect to action_0 and action_1
+  next_layer_weights_end = 0, next_layer_weights_start = (int)actor_network.weight.rows();
+  next_layer_bias_end = 0, next_layer_bias_start = (int)actor_network.bias.rows();
+  for (int layer = actor_network.n_layers; layer != 0; layer--)
+  {
+    n_nodes_this_layer              = actor_network.n_nodes[layer];
+    n_nodes_prev_layer              = actor_network.n_nodes[layer-1];
+    auto this_layer_activation_grad = actor_network.layer_activation_func[layer-1].grad(actor_activations[layer]);
+    auto& prev_layer_activations    = actor_activations[layer-1];
+
+    // calculate delta
+    if (layer != actor_network.n_layers)
+    {
+      delta.conservativeResize(NoChange, n_nodes_this_layer);
+      for (int node = 0; node < n_nodes_this_layer; node++)
+      {
+        delta(all, node) = (delta_to_here.matrix()*actor_network.weight(seq(next_layer_weights_start+node, 
+                                                                            next_layer_weights_end, 
+                                                                            n_nodes_this_layer)).eval().matrix());
+      }
+    }
+    else 
+    { delta.swap(delta_to_here); }
+    delta *= this_layer_activation_grad;
+
+    // calculate gradient
+    weight_end   = next_layer_weights_start - 1;
+    weight_start = weight_end - (n_nodes_this_layer*n_nodes_prev_layer) + 1;
+    bias_end     = next_layer_bias_start - 1;
+    bias_start   = bias_end - n_nodes_this_layer + 1;
+   for (int node = 0; node < n_nodes_this_layer; node++)
+   {
+      auto temp = delta(all, node);
+      for (int j = 0; j < n_nodes_prev_layer; j++)
+      {
+        auto weight_grad_list = temp*prev_layer_activations(all, j);
+        weight_grad(weight_start+(node*n_nodes_prev_layer)+j) = weight_grad_list.mean();
+      }
+      bias_grad(bias_start+node) = temp.mean();
+   }
+    delta_to_here.swap(delta);
+
+    next_layer_weights_end   = weight_end;
+    next_layer_weights_start = weight_start;
+    next_layer_bias_start    = bias_start;
+    next_layer_bias_end      = bias_end;
+  }
+
+  return retval;
+}
 
 
 auto learn_to_drive(const RL::GlobalConfig_t& global_config)
@@ -250,8 +333,8 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
   ArtificialNeuralNetwork<4, 5, 7, 1> sampling_critic, target_critic;
 
   sampling_actor.dense(Activation(RELU, HE), 
-                        Activation(RELU, HE), 
-                        Activation(SIGMOID, XAVIER));
+                       Activation(RELU, HE), 
+                       Activation(SIGMOID, XAVIER));
   target_actor = sampling_actor;
   
   sampling_critic.dense(Activation(RELU, HE), 
@@ -326,12 +409,12 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
         critic_opt.step(critic_weight_grad, critic_bias_grad, sampling_critic.weight, sampling_critic.bias);
 
         // calculate loss for sampling_actor network and perform optimization step
-        // auto [loss_actor, actor_weight_grad, actor_bias_grad] = actor_gradient_batch<batch_size>(sampling_actor, 
-        //                                                                                          sampling_critic, 
-        //                                                                                          replay_buffer(n_transitions, {s0, s1, a0, a1}),
-        //                                                                                          actor_loss,
-        //                                                                                          actor_loss_grad<batch_size>);
-        // actor_opt.step(actor_weight_grad, actor_bias_grad, sampling_actor.weight, sampling_actor.bias);
+        auto [loss_actor, actor_weight_grad, actor_bias_grad] = actor_gradient_batch<batch_size>(sampling_actor, 
+                                                                                                 sampling_critic, 
+                                                                                                 replay_buffer(n_transitions, {s0, s1, a0, a1}),
+                                                                                                 actor_loss,
+                                                                                                 actor_loss_grad);
+        actor_opt.step(actor_weight_grad, actor_bias_grad, sampling_actor.weight, sampling_actor.bias);
 
         // soft-update target networks parameters
         target_actor.weight *= soft_update_rate;
