@@ -324,13 +324,15 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
   constexpr size_t replay_buffer_size = 1000u;
 
   eig::Array<float, eig::Dynamic, 7, eig::RowMajor, replay_buffer_size> replay_buffer;
-  int replay_buffer_len = -1;
+  size_t replay_buffer_len = 0u;
   size_t episode_count  = 0u; 
   std::normal_distribution<float> exploration_noise(0.0F, 0.1F);
 
   // Deep deterministic policy gradient
-  ArtificialNeuralNetwork<2, 3, 5, 2> sampling_actor, target_actor;
-  ArtificialNeuralNetwork<4, 5, 7, 1> sampling_critic, target_critic;
+  ArtificialNeuralNetwork<2, 3, 5, 2> sampling_actor; 
+  ArtificialNeuralNetwork<2, 3, 5, 2> target_actor;
+  ArtificialNeuralNetwork<4, 5, 7, 1> sampling_critic;
+  ArtificialNeuralNetwork<4, 5, 7, 1> target_critic;
 
   sampling_actor.dense(Activation(RELU, HE), 
                        Activation(RELU, HE), 
@@ -373,14 +375,14 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
       reward = calc_reward(state_projected - target_state);
 
       // store current transition -> S_t, A_t, R_t, S_{t+1} in replay buffer
-      replay_buffer_len++;
       replay_buffer_len %= replay_buffer_size;
-      if (replay_buffer.rows() < replay_buffer_len)
-      { replay_buffer.conservativeResize(replay_buffer_len+1, NoChange); }
+      if (replay_buffer.rows() < (int)(replay_buffer_len+1u))
+      { replay_buffer.conservativeResize(replay_buffer_len+1u, NoChange); }
       replay_buffer(replay_buffer_len, {s0, s1})           = state;
       replay_buffer(replay_buffer_len, {a0, a1})           = action;
       replay_buffer(replay_buffer_len, r)                  = reward;
       replay_buffer(replay_buffer_len, {next_s0, next_s1}) = next_state;
+      replay_buffer_len++;
 
       current_state = state_projected;
       current_cycle++;
@@ -422,13 +424,16 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
 
         target_critic.bias *= soft_update_rate;
         target_critic.bias += (1.0F - soft_update_rate)*sampling_critic.bias;
+
+        std::cout << "Episode: " << episode_count << ", Cycle: " << current_cycle << ", LossCritic: " << loss_critic << ", LossActor: " << loss_actor << '\n';
       }
 
       robot_state_inside_world = is_robot_inside_world(current_state, global_config);
     }
+    episode_count++;
   }
 
-  std::make_tuple(target_actor, target_critic);
+  return std::make_tuple(target_actor, target_critic);
 }
 
 #endif
