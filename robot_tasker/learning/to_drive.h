@@ -9,6 +9,7 @@
 #include "../ANN/ANN.h"
 #include "../ANN/ANN_optimizers.h"
 
+#include "../environment_util.h"
 #include "../util.h"
 
 #include "robot_dynamics.h"
@@ -18,13 +19,13 @@ using namespace ANN;
 float calc_reward(const RL::DifferentialRobotState& state_error)
 {
   float pose_error    = std::sqrtf( (state_error.x*state_error.x) + (state_error.y*state_error.y) );
-  float heading_error = state_error.psi;
+  float heading_error = RL::wrapto_minuspi_pi(state_error.psi);
 
   // calculate reward for position error
-  float reward = RL::linear_interpolate(fabsf(pose_error), 0.1F,  -0.05F, 1.0F,  -5.0F);
+  float reward = RL::linear_interpolate(fabsf(pose_error), 0.1F,  -0.05F, 200.0F,  -25.0F);
 
   // calculate reward for heading error
-  reward += RL::linear_interpolate(fabsf(heading_error),   0.01F, -0.05F, 0.05F, -5.0F);
+  reward += RL::linear_interpolate(fabsf(heading_error),   0.01F, -0.05F, PI, -15.0F);
 
   return reward;
 }
@@ -35,7 +36,7 @@ auto calc_error(const RL::DifferentialRobotState& current_state,
 {
   auto state_error    = current_state - target_state;
   float pose_error    = std::sqrtf( (state_error.x*state_error.x) + (state_error.y*state_error.y) );
-  float heading_error = state_error.psi;
+  float heading_error = RL::wrapto_minuspi_pi(state_error.psi);
 
   return std::make_tuple(pose_error, heading_error);
 }
@@ -86,14 +87,14 @@ actor_loss_grad(const eig::Array<float, eig::Dynamic, 1>& reward)
 {
   UNUSED(reward);
   eig::Array<float, eig::Dynamic, 1> retval(reward.rows(), 1);
-  retval.fill(-1.0F);
+  retval.fill(1.0F);
   return retval;
 }
 
 float critic_loss(const eig::Array<float, eig::Dynamic, 1>& Q_sampling, 
                   const eig::Array<float, eig::Dynamic, 1>& Q_target)
 {
-  float loss = -0.5F*((Q_sampling - Q_target).square()).mean();
+  float loss = 0.5F*((Q_sampling - Q_target).square()).mean();
   return loss;
 }
 
@@ -102,19 +103,19 @@ eig::Array<float, BatchSize, 1>
 critic_loss_grad(const eig::Array<float, BatchSize, 1>& Q_sampling, 
                  const eig::Array<float, BatchSize, 1>& Q_target)
 {
-  // Loss = -(0.5/BatchSize)*Sum( Square(Q_sampling - Q_target) )
-  eig::Array<float, BatchSize, 1> retval = (Q_target - Q_sampling);
+  // Loss = (0.5/BatchSize)*Sum( Square(Q_sampling - Q_target) )
+  eig::Array<float, BatchSize, 1> retval = (Q_sampling - Q_target);
   return retval;
 }
 
 bool is_robot_inside_world(const RL::DifferentialRobotState& state,
                            const RL::GlobalConfig_t&         global_config)
 {
-  static const float& world_max_x = global_config.at("world/size/x"); 
+  static const float& world_max_x = global_config.at("world/size/x");
   static const float& world_max_y = global_config.at("world/size/y"); 
 
-  if (   (state.x > 0.0F) && (state.x < world_max_x)
-      && (state.y > 0.0F) && (state.y < world_max_y) )
+  if (   (state.x > 0.1F) && (state.x < world_max_x)
+      && (state.y > 0.1F) && (state.y < world_max_y) )
   {
     return true;
   }
@@ -165,8 +166,12 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
     actor_activations.emplace_back(BatchSize, n_nodes_cur_layer);
     for (int node = 0; node < n_nodes_cur_layer; node++)
     {
+      int this_node_weight_start = weights_start+(node*n_nodes_last_layer);
+      int this_node_weight_end   = weights_start+((node+1)*n_nodes_last_layer)-1;
+      
       // calculate wX + b
-      auto w  = actor_network.weight(seq(weights_start+node, weights_end, n_nodes_cur_layer)).eval();
+      auto w  = actor_network.weight(seq(this_node_weight_start, this_node_weight_end));
+
       auto wx = (actor_activations[layer-1].matrix() * w.matrix());
       actor_activations[layer](all, node) = actor_network.layer_activation_func[layer-1].activation_batch( (wx.array() + b(node)) );
     }
@@ -188,8 +193,12 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
     critic_activations.emplace_back(BatchSize, n_nodes_cur_layer);
     for (int node = 0; node < n_nodes_cur_layer; node++)
     {
+      int this_node_weight_start = weights_start+(node*n_nodes_last_layer);
+      int this_node_weight_end   = weights_start+((node+1)*n_nodes_last_layer)-1;
+      
       // calculate wX + b
-      auto w  = critic_network.weight(seq(weights_start+node, weights_end, n_nodes_cur_layer)).eval();
+      auto w  = critic_network.weight(seq(this_node_weight_start, this_node_weight_end));
+
       auto wx = (critic_activations[layer-1].matrix() * w.matrix());
       critic_activations[layer](all, node) = critic_network.layer_activation_func[layer-1].activation_batch( (wx.array() + b(node)) );
     }
@@ -215,7 +224,6 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
     n_nodes_this_layer              = critic_network.n_nodes[layer];
     n_nodes_prev_layer              = critic_network.n_nodes[layer-1];
     auto this_layer_activation_grad = critic_network.layer_activation_func[layer-1].grad(critic_activations[layer]);
-    auto& prev_layer_activations    = critic_activations[layer-1];
 
     // calculate delta
     if (layer != critic_network.n_layers)
@@ -230,7 +238,7 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
     }
     else 
     { delta.swap(delta_to_here); }
-    delta *= this_layer_activation_grad;
+    delta *= this_layer_activation_grad; // TODO: should I do this for last layer?
     delta_to_here.swap(delta);
 
     weight_end   = next_layer_weights_start - 1;
@@ -303,15 +311,14 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
   static const float& world_max_y = global_config.at("world/size/y"); 
   static const float& action1_max = global_config.at("robot/max_wheel_speed");
   static const float& action2_max = global_config.at("robot/max_wheel_speed");
-  const float& dt = global_config.at("cycle_time");
-  const int s0 = 0;
-  const int s1 = 1;
-  const int a0 = 2;
-  const int a1 = 3;
-  const int r  = 4;
+  const int s0      = 0;
+  const int s1      = 1;
+  const int a0      = 2;
+  const int a1      = 3;
+  const int r       = 4;
   const int next_s0 = 5;
   const int next_s1 = 6;
-  const float discount_factor = 0.3F; // TODO: Define this properly
+  const float discount_factor = 0.9F; // TODO: Tune this
 
   std::random_device seed;
   std::mt19937 rand_gen(seed());
@@ -321,27 +328,27 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
 
   constexpr size_t batch_size   = 256u;
   constexpr size_t max_episodes = 100u;
-  constexpr size_t replay_buffer_size = 1000u;
+  constexpr size_t replay_buffer_size = 2500u;
 
   eig::Array<float, eig::Dynamic, 7, eig::RowMajor, replay_buffer_size> replay_buffer;
   size_t replay_buffer_len = 0u;
-  size_t episode_count  = 0u; 
-  std::normal_distribution<float> exploration_noise(0.0F, 0.1F);
+  size_t episode_count     = 0u; 
+  std::normal_distribution<float> exploration_noise(0.0F, 1.0F);
 
   // Deep deterministic policy gradient
-  ArtificialNeuralNetwork<2, 3, 5, 2> sampling_actor; 
-  ArtificialNeuralNetwork<2, 3, 5, 2> target_actor;
-  ArtificialNeuralNetwork<4, 5, 7, 1> sampling_critic;
-  ArtificialNeuralNetwork<4, 5, 7, 1> target_critic;
+  ArtificialNeuralNetwork<2, 8, 10, 2> sampling_actor, target_actor; 
+  ArtificialNeuralNetwork<4, 10, 12, 1> sampling_critic, target_critic;
 
   sampling_actor.dense(Activation(RELU, HE), 
                        Activation(RELU, HE), 
-                       Activation(SIGMOID, XAVIER));
+                       Activation(RELU, HE)
+                       );
   target_actor = sampling_actor;
   
   sampling_critic.dense(Activation(RELU, HE), 
                         Activation(RELU, HE), 
-                        Activation(SIGMOID, XAVIER));
+                        Activation(RELU, HE)
+                        );
   target_critic = sampling_critic;
 
   AdamOptimizer actor_opt((int)sampling_actor.weight.rows(), (int)sampling_actor.bias.rows(), 1e-3F);
@@ -365,14 +372,24 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
       tie(state(0, 0), state(0, 1)) = calc_error(current_state, target_state);
       action  = forward_batch<1>(sampling_actor, state);
       action += exploration_noise(rand_gen);
+      
+      // clamp action
+      action(0, 0) = std::clamp(action(0, 0), -action1_max, action1_max);
+      action(0, 1) = std::clamp(action(0, 1), -action2_max, action2_max);
 
       // execute the action and observe next state, reward
       auto state_projected = differential_robot(current_state, 
                                                 {action(0, 0), action(0, 1)}, 
                                                 global_config);
+      
+      state_projected.psi = RL::wrapto_minuspi_pi(state_projected.psi);
 
       tie(next_state(0, 0), next_state(0, 1)) = calc_error(state_projected, target_state);
       reward = calc_reward(state_projected - target_state);
+
+      // debug code --start
+      ENV::update_visualizer({state_projected.x, state_projected.y}, {action(0, 0), action(0, 1)}, reward);
+      // debug code --end
 
       // store current transition -> S_t, A_t, R_t, S_{t+1} in replay buffer
       replay_buffer_len %= replay_buffer_size;

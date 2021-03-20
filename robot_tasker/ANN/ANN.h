@@ -84,7 +84,7 @@ auto forward_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& a
     auto b = ann.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1));
     this_layer_activation.conservativeResize(NoChange, n_nodes_cur_layer);
 
-    for (size_t node = 0; node < n_nodes_cur_layer; node++)
+    for (int node = 0; node < n_nodes_cur_layer; node++)
     {
       int this_node_weight_start = weights_start+(node*n_nodes_last_layer);
       int this_node_weight_end   = weights_start+((node+1)*n_nodes_last_layer)-1;

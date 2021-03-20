@@ -331,7 +331,7 @@ void realtime_visualizer_init(std::string_view world_file, int ring_buffer_len=1
   action_axes.grid(True)
 
   reward_axes.set_xlim(0, ring_buffer_len)
-  reward_axes.set_ylim(0, 1000)
+  reward_axes.set_ylim(-2000, 0)
   reward_axes.set_xlabel("Cycle", fontsize=8)
   reward_axes.set_ylabel("Reward", fontsize=8)
   reward_axes.tick_params(axis='x', labelsize=6)
