@@ -57,7 +57,7 @@ class Initializer{
               eig::ArrayBase<EigenDerived2>& bias,
               int                            n_nodes_last_layer)
     {
-      float std_dev = 1.0F;
+      float std_dev = 0.1F;
       switch(init_type_)
       {
         case XAVIER:
@@ -68,7 +68,7 @@ class Initializer{
           break;
         case RANDOM:
         default:
-          std_dev = 1.0F;
+          std_dev = 0.1F;
           break;
       }
       std::normal_distribution<float> norm(0.0F, std_dev);
@@ -78,8 +78,7 @@ class Initializer{
       { weights[i] = norm(rand_gen_); }
 
       // fill bias
-      for (size_t i = 0u; i < (size_t)bias.size(); i++)
-      { bias[i] = norm(rand_gen_); }
+      bias.fill(std_dev);
     }
 };
 
@@ -96,7 +95,7 @@ class Activation{
     template<typename EigenDerived>
     auto activation_batch(const eig::ArrayBase<EigenDerived>& wx_b) const
     {
-      eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor> retval(wx_b.rows(), wx_b.cols());
+      eig::Array<float, eig::Dynamic, 1> retval(wx_b.rows());
       switch(activation_e)
       {
         case SIGMOID:
@@ -158,13 +157,13 @@ class Activation{
         }
         case RELU:
         {
-          auto retval_expr = activation.unaryExpr([](float v){return v < 0.0F?0.0F:1.0F;});
+          auto retval_expr = activation.unaryExpr([](float v){return v < 1e-8F?0.0F:1.0F;});
           retval = retval_expr.eval();
           break;
         }
         default:
         {
-          retval = activation;
+          retval.fill(1.0F);
           break;
         }
       }

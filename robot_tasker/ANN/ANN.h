@@ -8,6 +8,9 @@
 #include "ANN_typedef.h"
 #include "ANN_activation.h"
 
+namespace ANN
+{
+
 template<int InputSize, int ... NHiddenLayers>
 struct ArtificialNeuralNetwork{
   ANN::weights_t     <InputSize, NHiddenLayers...>    weight;
@@ -58,44 +61,6 @@ struct ArtificialNeuralNetwork{
 };
 
 
-template<int InputSize, int ... NHiddenLayers, typename EigenDerived>
-auto forward(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& ann, const eig::ArrayBase<EigenDerived>& input)     
-  -> ANN::output_t<NHiddenLayers...>
-{
-  constexpr int largest_layer_len = max_layer_len<InputSize, NHiddenLayers...>::value;
-  eig::Array<float, eig::Dynamic, eig::Dynamic, 0, largest_layer_len, 1> prev_layer_activation;
-  eig::Array<float, eig::Dynamic, eig::Dynamic, 0, largest_layer_len, 1> this_layer_activation;
-
-  prev_layer_activation.resize(input.rows(), input.cols());
-  prev_layer_activation = input;
-
-  size_t weights_count = 0u;
-  size_t bias_count    = 0u;
-  for (size_t layer = 1u; layer < ann.n_layers; layer++)
-  {
-    size_t n_nodes_last_layer = ann.n_nodes(layer-1u);
-    size_t n_nodes_cur_layer  = ann.n_nodes(layer);
-    size_t weights_start      = weights_count;
-    size_t weights_end        = weights_start + (n_nodes_cur_layer*n_nodes_last_layer);
-    
-    auto b = ann.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1u));
-    this_layer_activation.resize(n_nodes_cur_layer, 1);
-    for (size_t node = 0u; node < n_nodes_cur_layer; node++)
-    {
-      // calculate wX + b
-      auto wx = prev_layer_activation.dot( ann.weight(seq(weights_start+(node*n_nodes_last_layer), weights_start+((node+1)*n_nodes_last_layer)-1)) );
-      this_layer_activation(node) = (ann.layer_activation_func[layer-1]).activation(wx + b(node));
-    }
-    prev_layer_activation.swap(this_layer_activation);
-    weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
-    bias_count     += n_nodes_cur_layer;
-  }
-
-  ANN::output_t<NHiddenLayers...> output = prev_layer_activation;
-  return output;
-}
-
-
 template<int BatchSize, int InputSize, int ... NHiddenLayers, typename EigenDerived>
 auto forward_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& ann, const eig::ArrayBase<EigenDerived>& input)
         -> ANN::output_batch_t<BatchSize, NHiddenLayers...>
@@ -121,8 +86,11 @@ auto forward_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& a
 
     for (size_t node = 0; node < n_nodes_cur_layer; node++)
     {
+      int this_node_weight_start = weights_start+(node*n_nodes_last_layer);
+      int this_node_weight_end   = weights_start+((node+1)*n_nodes_last_layer)-1;
+      
       // calculate wX + b
-      auto w  = ann.weight(seq(weights_start+node, weights_end, n_nodes_cur_layer)).eval();
+      auto w  = ann.weight(seq(this_node_weight_start, this_node_weight_end));
       auto wx = prev_layer_activation.matrix() * w.matrix();
       this_layer_activation(all, node) = ann.layer_activation_func[layer-1].activation_batch(wx.array() + b(node));
     }
@@ -172,8 +140,11 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& 
     activations.emplace_back(BatchSize, n_nodes_cur_layer);
     for (int node = 0; node < n_nodes_cur_layer; node++)
     {
+      int this_node_weight_start = weights_start+(node*n_nodes_last_layer);
+      int this_node_weight_end   = weights_start+((node+1)*n_nodes_last_layer)-1;
+
       // calculate wX + b
-      auto w  = ann.weight(seq(weights_start+node, weights_end, n_nodes_cur_layer)).eval();
+      auto w  = ann.weight(seq(this_node_weight_start, this_node_weight_end));
       auto wx = (activations[layer-1].matrix() * w.matrix());
       activations[layer](all, node) = ann.layer_activation_func[layer-1].activation_batch( (wx.array() + b(node)) );
     }
@@ -240,4 +211,6 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& 
   return retval;
 }
 
+
+} //namespace {ANN}
 #endif

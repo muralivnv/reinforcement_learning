@@ -40,6 +40,7 @@ using namespace std::chrono_literals;
 #define UNUSED(X) (void)(X)
 #define NOT(X) (!(X))
 #define PI (3.14159265F)
+#define TWO_PI (2.0F*PI)
 
 namespace RL {
 template<typename T>
