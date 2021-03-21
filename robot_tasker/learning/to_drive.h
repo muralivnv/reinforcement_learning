@@ -85,9 +85,9 @@ float actor_loss(const eig::Array<float, eig::Dynamic, 1>& reward)
 eig::Array<float, eig::Dynamic, 1>
 actor_loss_grad(const eig::Array<float, eig::Dynamic, 1>& reward)
 {
-  UNUSED(reward);
   eig::Array<float, eig::Dynamic, 1> retval(reward.rows(), 1);
-  retval.fill(1.0F);
+  retval = reward.unaryExpr([](float v){return (v < 0.0F)?1.0F:-1.0F;});
+
   return retval;
 }
 
@@ -114,12 +114,40 @@ bool is_robot_inside_world(const RL::DifferentialRobotState& state,
   static const float& world_max_x = global_config.at("world/size/x");
   static const float& world_max_y = global_config.at("world/size/y"); 
 
-  if (   (state.x > 0.1F) && (state.x < world_max_x)
-      && (state.y > 0.1F) && (state.y < world_max_y) )
+  if (   (state.x > 0.0F) && (state.x < world_max_x)
+      && (state.y > 0.0F) && (state.y < world_max_y) )
   {
     return true;
   }
   return false;
+}
+
+
+eig::Array<float, 1, 2> state_normalize(const eig::Array<float, 1, 2>& state, 
+                                        const RL::GlobalConfig_t& global_config)
+{
+  static const float& world_max_x = global_config.at("world/size/x"); 
+  static const float& world_max_y = global_config.at("world/size/y"); 
+  static const float max_pose_error = std::sqrtf(  (world_max_x)*(world_max_x) 
+                                                 + (world_max_y)*(world_max_y) );
+  eig::Array<float, 1, 2> normalized_state;
+  normalized_state(0, 0) = state(0, 0)/max_pose_error;
+  normalized_state(0, 1) = state(0, 1)/TWO_PI;
+
+  return normalized_state;
+}
+
+eig::Array<float, 1, 2> action_normalize(const eig::Array<float, 1, 2>& action, 
+                                        const RL::GlobalConfig_t& global_config)
+{
+  static const float& action1_max = global_config.at("robot/max_wheel_speed");
+  static const float& action2_max = global_config.at("robot/max_wheel_speed");
+
+  eig::Array<float, 1, 2> normalized_action;
+  normalized_action(0, 0) = action(0, 0)/(2.0F*action1_max);
+  normalized_action(0, 1) = action(0, 1)/(2.0F*action2_max);
+
+  return normalized_action;
 }
 
 
@@ -171,8 +199,10 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
       
       // calculate wX + b
       auto w  = actor_network.weight(seq(this_node_weight_start, this_node_weight_end));
-
       auto wx = (actor_activations[layer-1].matrix() * w.matrix());
+      auto w_temp = w.eval();
+      auto wx_temp = wx.eval();
+      auto wxb_temp = (wx_temp.array() + b(node)).eval();
       actor_activations[layer](all, node) = actor_network.layer_activation_func[layer-1].activation_batch( (wx.array() + b(node)) );
     }
     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
@@ -198,8 +228,10 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
       
       // calculate wX + b
       auto w  = critic_network.weight(seq(this_node_weight_start, this_node_weight_end));
-
       auto wx = (critic_activations[layer-1].matrix() * w.matrix());
+      auto w_temp = w.eval();
+      auto wx_temp = wx.eval();
+      auto wxb_temp = (wx_temp.array() + b(node)).eval();
       critic_activations[layer](all, node) = critic_network.layer_activation_func[layer-1].activation_batch( (wx.array() + b(node)) );
     }
     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
@@ -238,7 +270,7 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
     }
     else 
     { delta.swap(delta_to_here); }
-    delta *= this_layer_activation_grad; // TODO: should I do this for last layer?
+    delta *= this_layer_activation_grad;
     delta_to_here.swap(delta);
 
     weight_end   = next_layer_weights_start - 1;
@@ -252,8 +284,17 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
     next_layer_bias_end      = bias_end;
   }
 
+  // gradient for the input layer of critic network
+  delta.conservativeResize(NoChange, critic_network.n_nodes[0]);
+  for (int node = 0; node < critic_network.n_nodes[0]; node++)
+  {
+    delta(all, node) = (delta_to_here.matrix()*critic_network.weight(seq(next_layer_weights_start+node, 
+                                                                         next_layer_weights_end, 
+                                                                         critic_network.n_nodes[0])).eval().matrix());
+  }
+
   // calculate gradient for the actor_network
-  delta_to_here = delta_to_here(all, {2, 3}); // only take gradient with respect to action_0 and action_1
+  delta_to_here = delta(all, {2, 3}); // only take gradient with respect to action_0 and action_1
   next_layer_weights_end = 0, next_layer_weights_start = (int)actor_network.weight.rows();
   next_layer_bias_end = 0, next_layer_bias_start = (int)actor_network.bias.rows();
   for (int layer = actor_network.n_layers; layer != 0; layer--)
@@ -326,7 +367,7 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
   std::uniform_real_distribution<float> pose_y_sample(0, world_max_y);
   std::uniform_real_distribution<float> heading_sample(-PI, PI);
 
-  constexpr size_t batch_size   = 256u;
+  constexpr size_t batch_size   = 512u;
   constexpr size_t max_episodes = 100u;
   constexpr size_t replay_buffer_size = 2500u;
 
@@ -343,16 +384,18 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
                        Activation(RELU, HE), 
                        Activation(RELU, HE)
                        );
+  // sampling_actor.bias(all, 0) = 0.1F;
   target_actor = sampling_actor;
   
   sampling_critic.dense(Activation(RELU, HE), 
                         Activation(RELU, HE), 
                         Activation(RELU, HE)
                         );
+  // sampling_critic.bias(all, 0) = 0.3F;
   target_critic = sampling_critic;
 
-  AdamOptimizer actor_opt((int)sampling_actor.weight.rows(), (int)sampling_actor.bias.rows(), 1e-3F);
-  AdamOptimizer critic_opt((int)sampling_critic.weight.rows(), (int)sampling_critic.bias.rows(), 1e-3F);
+  AdamOptimizer actor_opt((int)sampling_actor.weight.rows(), (int)sampling_actor.bias.rows(), 1e-5F);
+  AdamOptimizer critic_opt((int)sampling_critic.weight.rows(), (int)sampling_critic.bias.rows(), 1e-5F);
   
   float soft_update_rate = 0.95F;
   while (episode_count < max_episodes)
@@ -370,6 +413,8 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
     {
       // select action based on the currrent state of the robot
       tie(state(0, 0), state(0, 1)) = calc_error(current_state, target_state);
+      state = state_normalize(state, global_config);
+
       action  = forward_batch<1>(sampling_actor, state);
       action += exploration_noise(rand_gen);
       
@@ -385,6 +430,7 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
       state_projected.psi = RL::wrapto_minuspi_pi(state_projected.psi);
 
       tie(next_state(0, 0), next_state(0, 1)) = calc_error(state_projected, target_state);
+      next_state = state_normalize(next_state, global_config);
       reward = calc_reward(state_projected - target_state);
 
       // debug code --start
@@ -396,7 +442,7 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
       if (replay_buffer.rows() < (int)(replay_buffer_len+1u))
       { replay_buffer.conservativeResize(replay_buffer_len+1u, NoChange); }
       replay_buffer(replay_buffer_len, {s0, s1})           = state;
-      replay_buffer(replay_buffer_len, {a0, a1})           = action;
+      replay_buffer(replay_buffer_len, {a0, a1})           = action_normalize(action, global_config);
       replay_buffer(replay_buffer_len, r)                  = reward;
       replay_buffer(replay_buffer_len, {next_s0, next_s1}) = next_state;
       replay_buffer_len++;

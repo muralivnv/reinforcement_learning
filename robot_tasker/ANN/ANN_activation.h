@@ -71,14 +71,23 @@ class Initializer{
           std_dev = 0.1F;
           break;
       }
-      std::normal_distribution<float> norm(0.0F, std_dev);
+      std::normal_distribution<float> weights_dist(0.0F, std_dev);
       
       // fill weights
+      float norm = 0.0F;
       for (size_t i = 0u; i < (size_t)weights.size(); i++)
-      { weights[i] = norm(rand_gen_); }
+      {
+        weights[i] = weights_dist(rand_gen_); 
+        norm += weights[i]*weights[i];
+      }
+      norm = std::sqrtf(norm);
+      weights /= norm;
 
       // fill bias
-      bias.fill(std_dev);
+      for (size_t i = 0u; i < (size_t)bias.size(); i++)
+      {
+        bias[i] = fabsf(weights_dist(rand_gen_)); 
+      }
     }
 };
 
@@ -106,7 +115,8 @@ class Activation{
         }
         case RELU:
         {
-          auto retval_expr = wx_b.unaryExpr([](float v){return v < 0.0F?0.0F:v; });
+          auto retval_expr = wx_b.unaryExpr([](float v){return v < 0.0F?0.01F*v:v; });
+          // auto retval_expr = wx_b.unaryExpr([](float v){return v < 0.0F?0.0F:v; });
           retval = retval_expr.eval();
           break;
         }
@@ -131,7 +141,8 @@ class Activation{
         }
         case RELU:
         {
-          retval = wx_b < 0.0F?0.0F:wx_b;
+          retval = wx_b < 0.0F?0.01F*wx_b:wx_b;
+          // retval = wx_b < 0.0F?0.0F:wx_b;
           break;
         }
         default:
@@ -157,7 +168,8 @@ class Activation{
         }
         case RELU:
         {
-          auto retval_expr = activation.unaryExpr([](float v){return v < 1e-8F?0.0F:1.0F;});
+          auto retval_expr = activation.unaryExpr([](float v){return v < 1e-10F?-0.01F:1.0F;});
+          // auto retval_expr = activation.unaryExpr([](float v){return v < 1e-8F?0.0F:1.0F;});
           retval = retval_expr.eval();
           break;
         }

@@ -35,6 +35,7 @@ struct ArtificialNeuralNetwork{
   template<typename ... Activation_t>
   void dense(Activation_t&& ... activation)
   {
+    static_assert(sizeof...(activation) == sizeof...(NHiddenLayers), "number_of_activations_not_equal_to_number_of_hidden_layers");
     int index = 0u;
     ((this->layer_activation_func[index++] = activation), ...);
     init_params();
