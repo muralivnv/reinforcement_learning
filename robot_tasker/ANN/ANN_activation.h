@@ -72,6 +72,7 @@ class Initializer{
           break;
       }
       std::normal_distribution<float> weights_dist(0.0F, std_dev);
+      std::uniform_real_distribution<float> bias_dist(0.05F, 0.5F);
       
       // fill weights
       float norm = 0.0F;
@@ -85,9 +86,7 @@ class Initializer{
 
       // fill bias
       for (size_t i = 0u; i < (size_t)bias.size(); i++)
-      {
-        bias[i] = fabsf(weights_dist(rand_gen_)); 
-      }
+      {  bias[i] = bias_dist(rand_gen_);  }
     }
 };
 
@@ -115,8 +114,8 @@ class Activation{
         }
         case RELU:
         {
-          auto retval_expr = wx_b.unaryExpr([](float v){return v < 0.0F?0.01F*v:v; });
           // auto retval_expr = wx_b.unaryExpr([](float v){return v < 0.0F?0.0F:v; });
+          auto retval_expr = wx_b.unaryExpr([](float v){return v < 0.0F?0.5F*v:v; }); // LEAKY-RELU
           retval = retval_expr.eval();
           break;
         }
@@ -141,8 +140,8 @@ class Activation{
         }
         case RELU:
         {
-          retval = wx_b < 0.0F?0.01F*wx_b:wx_b;
           // retval = wx_b < 0.0F?0.0F:wx_b;
+          retval = wx_b < 0.0F?0.5F*wx_b:wx_b; // LEAKY-RELU
           break;
         }
         default:
@@ -168,8 +167,8 @@ class Activation{
         }
         case RELU:
         {
-          auto retval_expr = activation.unaryExpr([](float v){return v < 1e-10F?-0.01F:1.0F;});
           // auto retval_expr = activation.unaryExpr([](float v){return v < 1e-8F?0.0F:1.0F;});
+          auto retval_expr = activation.unaryExpr([](float v){return v < 1e-10F?0.5F:1.0F;}); // LEAKY-RELU
           retval = retval_expr.eval();
           break;
         }

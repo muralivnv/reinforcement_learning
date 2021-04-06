@@ -14,8 +14,8 @@ using namespace ANN;
 
 auto load_moon_data(const std::string& data_file)
 {
-  eig::Array<float, 1000, 2, eig::RowMajor> X;
-  eig::Array<float, 1000, 1>                Y;
+  eig::Array<float, 5000, 2, eig::RowMajor> X;
+  eig::Array<float, 5000, 1>                Y;
 
   std::ifstream in_file(data_file);
   if (in_file.is_open())
@@ -100,6 +100,25 @@ std::array<int, N> get_n_shuffled_idx(const int container_size)
   return shuffled_n_idx;
 }
 
+template<int BatchSize, typename Network, typename InputDerived, typename OutputDerived>
+void calc_accuracy(const Network& network, 
+                   const eig::ArrayBase<InputDerived>& input, 
+                   const eig::ArrayBase<OutputDerived>& output)
+{
+  auto pred_out = forward_batch<BatchSize>(network, input);
+  auto pred_out_filtered = pred_out.unaryExpr([](float v){return v < 0.5F?0.0F:1.0F;});
+  int n_correct_predictions = 0;
+  for (int i = 0; i < BatchSize; i++)
+  {
+    if ((int)pred_out_filtered(i, 0) == (int)output(i, 0))
+    {
+      n_correct_predictions++;
+    }
+  }
+  std::cout << "Accuracy: " << (float)(n_correct_predictions)/(float)BatchSize;
+}
+
+
 template<int BatchSize>
 void test_ann()
 {
@@ -116,7 +135,7 @@ void test_ann()
   size_t current_epoch       = 0u;
   while(current_epoch < max_epoch)
   {
-    auto n_shuffled_idx = get_n_shuffled_idx<BatchSize>((int)input.rows());
+    auto n_shuffled_idx = get_n_shuffled_idx<BatchSize>(3500u);
     auto [loss, weight_grad, bias_grad] = gradient_batch<BatchSize>(network, 
                                                                     input(n_shuffled_idx, all), 
                                                                     ref_out(n_shuffled_idx, all), 
@@ -138,6 +157,10 @@ void test_ann()
   plt.show()
   )pyp", _p(loss_hist));
   // debug code --end
+  
+  // calculate accuracy
+  calc_accuracy<1500>(network, input(seq(3500, last), all), ref_out(seq(3500, last), all));
+
 }
 
 #endif

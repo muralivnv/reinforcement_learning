@@ -22,14 +22,18 @@ float calc_reward(const RL::DifferentialRobotState& state_error)
   float heading_error = RL::wrapto_minuspi_pi(state_error.psi);
 
   // calculate reward for position error
-  float reward = RL::linear_interpolate(fabsf(pose_error), 0.1F,  -0.05F, 200.0F,  -25.0F);
+  float reward = RL::linear_interpolate(fabsf(pose_error), 0.1F,  5.0F, 200.0F,  -25.0F);
 
   // calculate reward for heading error
-  reward += RL::linear_interpolate(fabsf(heading_error),   0.01F, -0.05F, PI, -15.0F);
+  reward += RL::linear_interpolate(fabsf(heading_error),   0.01F, 5.0F, PI, -75.0F);
 
   return reward;
 }
 
+void reward_normalize(float& reward)
+{
+  reward /= 100.0F;
+}
 
 auto calc_error(const RL::DifferentialRobotState& current_state, 
                 const RL::DifferentialRobotState& target_state)
@@ -37,9 +41,34 @@ auto calc_error(const RL::DifferentialRobotState& current_state,
   auto state_error    = current_state - target_state;
   float pose_error    = std::sqrtf( (state_error.x*state_error.x) + (state_error.y*state_error.y) );
   float heading_error = RL::wrapto_minuspi_pi(state_error.psi);
-
   return std::make_tuple(pose_error, heading_error);
 }
+
+eig::Array<float, 1, 2> state_normalize(const eig::Array<float, 1, 2>& state, 
+                                        const RL::GlobalConfig_t& global_config)
+{
+  static const float& world_max_x = global_config.at("world/size/x"); 
+  static const float& world_max_y = global_config.at("world/size/y"); 
+  static const float max_pose_error = std::sqrtf(  (world_max_x)*(world_max_x) 
+                                                 + (world_max_y)*(world_max_y) );
+  eig::Array<float, 1, 2> normalized_state;
+  normalized_state(0, 0) = state(0, 0)/max_pose_error;
+  normalized_state(0, 1) = state(0, 1)/TWO_PI;
+
+  return normalized_state;
+}
+
+template<typename EigenDerived>
+void action_normalize(const RL::GlobalConfig_t& global_config,
+                            eig::ArrayBase<EigenDerived>& action)
+{
+  static const float& action1_max = global_config.at("robot/max_wheel_speed");
+  static const float& action2_max = global_config.at("robot/max_wheel_speed");
+
+  action(all, 0) /= (2.0F*action1_max);
+  action(all, 1) /= (2.0F*action2_max);
+}
+
 
 template<int N>
 std::array<int, N> get_n_shuffled_idx(const int container_size)
@@ -78,7 +107,6 @@ auto reset_states(std::uniform_real_distribution<float>& pose_x_sample,
 float actor_loss(const eig::Array<float, eig::Dynamic, 1>& reward)
 {
   float loss = -reward.mean();
-
   return loss;
 }
 
@@ -86,7 +114,7 @@ eig::Array<float, eig::Dynamic, 1>
 actor_loss_grad(const eig::Array<float, eig::Dynamic, 1>& reward)
 {
   eig::Array<float, eig::Dynamic, 1> retval(reward.rows(), 1);
-  retval = reward.unaryExpr([](float v){return (v < 0.0F)?1.0F:-1.0F;});
+  retval.fill(-1.0F);
 
   return retval;
 }
@@ -108,7 +136,7 @@ critic_loss_grad(const eig::Array<float, BatchSize, 1>& Q_sampling,
   return retval;
 }
 
-bool is_robot_inside_world(const RL::DifferentialRobotState& state,
+bool is_robot_outside_world(const RL::DifferentialRobotState& state,
                            const RL::GlobalConfig_t&         global_config)
 {
   static const float& world_max_x = global_config.at("world/size/x");
@@ -117,39 +145,23 @@ bool is_robot_inside_world(const RL::DifferentialRobotState& state,
   if (   (state.x > 0.0F) && (state.x < world_max_x)
       && (state.y > 0.0F) && (state.y < world_max_y) )
   {
-    return true;
+    return false;
   }
+  return true;
+}
+
+bool has_robot_reached_target(const RL::DifferentialRobotState& current_state,
+                              const RL::DifferentialRobotState& target_state)
+{
+  auto [pose_error, heading_error] = calc_error(current_state, target_state);
+
+  if (   (pose_error           < 1.0F)
+      && (fabsf(heading_error) < 0.02F) )
+  {
+    return true;
+  } 
   return false;
-}
-
-
-eig::Array<float, 1, 2> state_normalize(const eig::Array<float, 1, 2>& state, 
-                                        const RL::GlobalConfig_t& global_config)
-{
-  static const float& world_max_x = global_config.at("world/size/x"); 
-  static const float& world_max_y = global_config.at("world/size/y"); 
-  static const float max_pose_error = std::sqrtf(  (world_max_x)*(world_max_x) 
-                                                 + (world_max_y)*(world_max_y) );
-  eig::Array<float, 1, 2> normalized_state;
-  normalized_state(0, 0) = state(0, 0)/max_pose_error;
-  normalized_state(0, 1) = state(0, 1)/TWO_PI;
-
-  return normalized_state;
-}
-
-eig::Array<float, 1, 2> action_normalize(const eig::Array<float, 1, 2>& action, 
-                                        const RL::GlobalConfig_t& global_config)
-{
-  static const float& action1_max = global_config.at("robot/max_wheel_speed");
-  static const float& action2_max = global_config.at("robot/max_wheel_speed");
-
-  eig::Array<float, 1, 2> normalized_action;
-  normalized_action(0, 0) = action(0, 0)/(2.0F*action1_max);
-  normalized_action(0, 1) = action(0, 1)/(2.0F*action2_max);
-
-  return normalized_action;
-}
-
+}                              
 
 template<int BatchSize, 
         int ActorInputSize,  int ... ActorNHiddenLayers, 
@@ -159,7 +171,8 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
                           const ArtificialNeuralNetwork<CriticInputSize, CriticNHiddenLayers ...>& critic_network,
                           const eig::ArrayBase<EigenDerived>&                                     input,
                                 LossFcn_t&                                                        loss_fcn, 
-                                LossGradFcn_t&                                                    loss_grad_fcn)
+                                LossGradFcn_t&                                                    loss_grad_fcn, 
+                          const RL::GlobalConfig_t&                                               global_config)
 {
   constexpr int output_len        = ann_output_len<ActorNHiddenLayers ...>::value;
   constexpr int actor_n_layers    = pack_len<ActorInputSize, ActorNHiddenLayers ...>::value;
@@ -169,6 +182,9 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
   using bias_type     = decltype(actor_network.bias);
   using Delta_t       = eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor, BatchSize, largest_layer_len>;
   using Activation_t  = eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>;
+
+  const float action1_max = global_config.at("robot/max_wheel_speed");
+  const float action2_max = global_config.at("robot/max_wheel_speed");
 
   tuple<float, weight_type, bias_type> retval = std::make_tuple(0.0F, weight_type{}, bias_type{});
   auto& [loss, weight_grad, bias_grad] = retval;
@@ -200,14 +216,19 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
       // calculate wX + b
       auto w  = actor_network.weight(seq(this_node_weight_start, this_node_weight_end));
       auto wx = (actor_activations[layer-1].matrix() * w.matrix());
-      auto w_temp = w.eval();
-      auto wx_temp = wx.eval();
-      auto wxb_temp = (wx_temp.array() + b(node)).eval();
+      // auto w_temp = w.eval();
+      // auto wx_temp = wx.eval(); // TODO: remove temp
+      // auto wxb_temp = (wx_temp.array() + b(node)).eval();
       actor_activations[layer](all, node) = actor_network.layer_activation_func[layer-1].activation_batch( (wx.array() + b(node)) );
     }
     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
     bias_count     += n_nodes_cur_layer;
   }
+  //normalize actor_network actions
+  critic_activations[0](all, {2, 3}) = actor_activations.back();
+  critic_activations[0](all, 2) = critic_activations[0](all, 2).unaryExpr([action1_max](float a) { return std::clamp(a, -action1_max, action1_max); });
+  critic_activations[0](all, 3) = critic_activations[0](all, 3).unaryExpr([action2_max](float a) { return std::clamp(a, -action2_max, action2_max); });
+  // action_normalize(global_config, critic_activations[0](all, {2, 3}));
 
   // calculate and store activations at each layer for critic_network
   weights_count = 0;
@@ -229,9 +250,9 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
       // calculate wX + b
       auto w  = critic_network.weight(seq(this_node_weight_start, this_node_weight_end));
       auto wx = (critic_activations[layer-1].matrix() * w.matrix());
-      auto w_temp = w.eval();
-      auto wx_temp = wx.eval();
-      auto wxb_temp = (wx_temp.array() + b(node)).eval();
+      // auto w_temp = w.eval(); // TODO: remove this temp code
+      // auto wx_temp = wx.eval();
+      // auto wxb_temp = (wx_temp.array() + b(node)).eval();
       critic_activations[layer](all, node) = critic_network.layer_activation_func[layer-1].activation_batch( (wx.array() + b(node)) );
     }
     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
@@ -345,6 +366,66 @@ auto actor_gradient_batch(const ArtificialNeuralNetwork<ActorInputSize, ActorNHi
   return retval;
 }
 
+// function to test actor_gradient_batch
+template<int BatchSize, typename CriticNetwork, typename ActorNetwork, typename EigenDerived1, typename LossFcn>
+auto actor_gradient_naive(const CriticNetwork&                 sampling_critic, 
+                          const ActorNetwork&                  sampling_actor, 
+                          const eig::ArrayBase<EigenDerived1>& actor_input, 
+                                LossFcn                        loss_fcn)
+{
+  ActorNetwork actor_local = sampling_actor;
+  decltype(actor_local.weight) weight_grad;
+  decltype(actor_local.bias)   bias_grad;
+  float epsilon = 1e-3F;
+
+  for (int i = 0; i < actor_local.weight.rows(); i++)
+  {
+    // perturbation left
+    actor_local.weight(i, 0) -= epsilon;
+    auto actions = forward_batch<BatchSize>(actor_local, actor_input);
+    eig::Array<float, BatchSize, 4, eig::RowMajor> critic_input;
+    critic_input << actor_input, actions;
+    auto reward  = forward_batch<BatchSize>(sampling_critic, critic_input);
+    float loss_left = loss_fcn(reward);
+    actor_local.weight(i, 0) += epsilon;
+
+    // perturbation right
+    actor_local.weight(i, 0) += epsilon;
+    actions = forward_batch<BatchSize>(actor_local, actor_input);
+    critic_input(all, {2, 3}) = actions;
+    reward  = forward_batch<BatchSize>(sampling_critic, critic_input);
+    float loss_right = loss_fcn(reward);
+    actor_local.weight(i, 0) -= epsilon;
+
+    // central difference based derivative estimate
+    weight_grad(i, 0) = (loss_right - loss_left)/(2.0F*epsilon);
+  }
+
+  for (int i = 0; i < actor_local.bias.rows(); i++)
+  {
+    // perturbation left
+    actor_local.bias(i, 0) -= epsilon;
+    auto actions = forward_batch<BatchSize>(actor_local, actor_input);
+    eig::Array<float, BatchSize, 4, eig::RowMajor> critic_input;
+    critic_input << actor_input, actions;
+    auto reward  = forward_batch<BatchSize>(sampling_critic, critic_input);
+    float loss_left = loss_fcn(reward);
+    actor_local.bias(i, 0) += epsilon;
+
+    // perturbation right
+    actor_local.bias(i, 0) += epsilon;
+    actions = forward_batch<BatchSize>(actor_local, actor_input);
+    critic_input(all, {2, 3}) = actions;
+    reward  = forward_batch<BatchSize>(sampling_critic, critic_input);
+    float loss_right = loss_fcn(reward);
+    actor_local.bias(i, 0) -= epsilon;
+
+    // central difference based derivative estimate
+    bias_grad(i, 0) = (loss_right - loss_left)/(2.0F*epsilon);
+  }
+
+  return std::make_tuple(weight_grad, bias_grad);
+}
 
 auto learn_to_drive(const RL::GlobalConfig_t& global_config)
 {
@@ -352,14 +433,15 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
   static const float& world_max_y = global_config.at("world/size/y"); 
   static const float& action1_max = global_config.at("robot/max_wheel_speed");
   static const float& action2_max = global_config.at("robot/max_wheel_speed");
-  const int s0      = 0;
-  const int s1      = 1;
-  const int a0      = 2;
-  const int a1      = 3;
-  const int r       = 4;
-  const int next_s0 = 5;
-  const int next_s1 = 6;
-  const float discount_factor = 0.9F; // TODO: Tune this
+  const int s0        = 0;
+  const int s1        = 1;
+  const int a0        = 2;
+  const int a1        = 3;
+  const int r         = 4;
+  const int next_s0   = 5;
+  const int next_s1   = 6;
+  const int sim_state = 7;
+  const float discount_factor = 0.9F;
 
   std::random_device seed;
   std::mt19937 rand_gen(seed());
@@ -367,18 +449,19 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
   std::uniform_real_distribution<float> pose_y_sample(0, world_max_y);
   std::uniform_real_distribution<float> heading_sample(-PI, PI);
 
-  constexpr size_t batch_size   = 512u;
-  constexpr size_t max_episodes = 100u;
-  constexpr size_t replay_buffer_size = 2500u;
+  constexpr size_t batch_size   = 1024u;
+  constexpr size_t max_episodes = 200u;
+  constexpr size_t replay_buffer_size = 10000u;
 
-  eig::Array<float, eig::Dynamic, 7, eig::RowMajor, replay_buffer_size> replay_buffer;
+  eig::Array<float, eig::Dynamic, 8, eig::RowMajor> replay_buffer;
+  replay_buffer.resize(replay_buffer_size, 8);
   size_t replay_buffer_len = 0u;
   size_t episode_count     = 0u; 
-  std::normal_distribution<float> exploration_noise(0.0F, 1.0F);
+  std::uniform_real_distribution<float> exploration_noise(-2.0F, 2.0F);
 
   // Deep deterministic policy gradient
   ArtificialNeuralNetwork<2, 8, 10, 2> sampling_actor, target_actor; 
-  ArtificialNeuralNetwork<4, 10, 12, 1> sampling_critic, target_critic;
+  ArtificialNeuralNetwork<4, 14, 20, 1> sampling_critic, target_critic;
 
   sampling_actor.dense(Activation(RELU, HE), 
                        Activation(RELU, HE), 
@@ -391,25 +474,28 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
                         Activation(RELU, HE), 
                         Activation(RELU, HE)
                         );
-  // sampling_critic.bias(all, 0) = 0.3F;
+  // sampling_critic.bias(all, 0) = 0.2F;
   target_critic = sampling_critic;
 
-  AdamOptimizer actor_opt((int)sampling_actor.weight.rows(), (int)sampling_actor.bias.rows(), 1e-5F);
-  AdamOptimizer critic_opt((int)sampling_critic.weight.rows(), (int)sampling_critic.bias.rows(), 1e-5F);
+  AdamOptimizer actor_opt((int)sampling_actor.weight.rows(), (int)sampling_actor.bias.rows(), 1e-3F);
+  AdamOptimizer critic_opt((int)sampling_critic.weight.rows(), (int)sampling_critic.bias.rows(), 1e-3F);
   
   float soft_update_rate = 0.95F;
+  size_t current_cycle = 0u;
   while (episode_count < max_episodes)
   {
     auto [current_state, target_state] = reset_states(pose_x_sample, pose_y_sample, heading_sample, rand_gen);
+    auto current_state_dbg = current_state; // TODO: Dbg
+
+    ENV::update_target_pose({target_state.x, target_state.y});
 
     eig::Array<float, 1, 2, eig::RowMajor> state;
     eig::Array<float, 1, 2, eig::RowMajor> action;
     float reward;
     eig::Array<float, 1, 2, eig::RowMajor> next_state;
 
-    bool robot_state_inside_world = true;
-    size_t current_cycle          = 0u;
-    while(robot_state_inside_world)
+    bool episode_done = false;
+    while(NOT(episode_done))
     {
       // select action based on the currrent state of the robot
       tie(state(0, 0), state(0, 1)) = calc_error(current_state, target_state);
@@ -431,26 +517,50 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
 
       tie(next_state(0, 0), next_state(0, 1)) = calc_error(state_projected, target_state);
       next_state = state_normalize(next_state, global_config);
-      reward = calc_reward(state_projected - target_state);
+      reward     = calc_reward(state_projected - target_state);
 
       // debug code --start
-      ENV::update_visualizer({state_projected.x, state_projected.y}, {action(0, 0), action(0, 1)}, reward);
+      decltype(state) state_dbg;
+      decltype(action) action_dbg;
+      tie(state_dbg(0, 0), state_dbg(0, 1)) = calc_error(current_state_dbg, target_state);
+      state_dbg   = state_normalize(state_dbg, global_config);
+      action_dbg  = forward_batch<1>(target_actor, state_dbg);
+      action_dbg(0, 0) = std::clamp(action_dbg(0, 0), -action1_max, action1_max);
+      action_dbg(0, 1) = std::clamp(action_dbg(0, 1), -action2_max, action2_max);
+      current_state_dbg = differential_robot(current_state_dbg, 
+                                             {action_dbg(0, 0), action_dbg(0, 1)}, 
+                                             global_config);
+      current_state_dbg.psi = RL::wrapto_minuspi_pi(current_state_dbg.psi);
+      if ( (current_cycle % 200) == 0)
+      {
+        eig::Array<float, 1, 4> critic_input; 
+        critic_input << state_dbg, action_dbg;
+        auto global_reward = forward_batch<1>(target_critic, critic_input);
+        ENV::update_visualizer({current_state_dbg.x, current_state_dbg.y}, {action_dbg(0, 0), action_dbg(0, 1)}, global_reward(0, 0));  
+      }
       // debug code --end
+
+      // action_normalize(global_config, action);
+      reward_normalize(reward);
+
+      episode_done  = is_robot_outside_world(state_projected, global_config);
+      episode_done |= has_robot_reached_target(state_projected, target_state);
 
       // store current transition -> S_t, A_t, R_t, S_{t+1} in replay buffer
       replay_buffer_len %= replay_buffer_size;
       if (replay_buffer.rows() < (int)(replay_buffer_len+1u))
       { replay_buffer.conservativeResize(replay_buffer_len+1u, NoChange); }
       replay_buffer(replay_buffer_len, {s0, s1})           = state;
-      replay_buffer(replay_buffer_len, {a0, a1})           = action_normalize(action, global_config);
+      replay_buffer(replay_buffer_len, {a0, a1})           = action;
       replay_buffer(replay_buffer_len, r)                  = reward;
       replay_buffer(replay_buffer_len, {next_s0, next_s1}) = next_state;
+      replay_buffer(replay_buffer_len, sim_state)          = (episode_done == true)? 0.0F:1.0F;
       replay_buffer_len++;
 
       current_state = state_projected;
       current_cycle++;
 
-      if (current_cycle >= batch_size)
+      if (current_cycle >= replay_buffer_size)
       {
         // Sample 'N' transitions from replay buffer to do mini-batch param optimization
         auto n_transitions = get_n_shuffled_idx<batch_size>((int)replay_buffer.rows());
@@ -460,9 +570,12 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
 
         target_critic_input(all, {s0, s1}) = replay_buffer(n_transitions, {next_s0, next_s1});
         target_critic_input(all, {a0, a1}) = forward_batch<batch_size>(target_actor, target_critic_input(all, {s0, s1}));
+        
+        // normalize actions
+        // action_normalize(global_config, target_critic_input(all, {a0, a1}));
 
         Q_target  = forward_batch<batch_size>(target_critic, target_critic_input);
-        Q_target *= discount_factor;
+        Q_target *= (discount_factor*replay_buffer(n_transitions, sim_state));
         Q_target += replay_buffer(n_transitions, r);
 
         // calculate loss between Q_target, Q_sampling and perform optimization step
@@ -478,7 +591,8 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
                                                                                                  sampling_critic, 
                                                                                                  replay_buffer(n_transitions, {s0, s1, a0, a1}),
                                                                                                  actor_loss,
-                                                                                                 actor_loss_grad);
+                                                                                                 actor_loss_grad, 
+                                                                                                 global_config);
         actor_opt.step(actor_weight_grad, actor_bias_grad, sampling_actor.weight, sampling_actor.bias);
 
         // soft-update target networks parameters
@@ -490,8 +604,6 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config)
 
         std::cout << "Episode: " << episode_count << ", Cycle: " << current_cycle << ", LossCritic: " << loss_critic << ", LossActor: " << loss_actor << '\n';
       }
-
-      robot_state_inside_world = is_robot_inside_world(current_state, global_config);
     }
     episode_count++;
   }

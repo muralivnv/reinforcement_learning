@@ -331,7 +331,7 @@ void realtime_visualizer_init(std::string_view world_file, int ring_buffer_len=1
   action_axes.grid(True)
 
   reward_axes.set_xlim(0, ring_buffer_len)
-  reward_axes.set_ylim(-2000, 0)
+  reward_axes.set_ylim(-2000, 500)
   reward_axes.set_xlabel("Cycle", fontsize=8)
   reward_axes.set_ylabel("Reward", fontsize=8)
   reward_axes.tick_params(axis='x', labelsize=6)
@@ -360,6 +360,7 @@ void realtime_visualizer_init(std::string_view world_file, int ring_buffer_len=1
     poly_line_seq.append(line)
 
   robot_pose_plot_obj, = world_axes.plot(0, 0, 'bx', markersize=8, alpha=0.8)
+  target_pose_plot_obj, = world_axes.plot(0, 0, 'ro', markersize=12, alpha=0.9)
   robot_traj_plot_obj, = world_axes.plot(0, 0, 'r--', linewidth=0.8, alpha=0.6)
   action1_plot_obj,    = action_axes.plot([0], [0], 'ko--', linewidth=1, markersize=1, alpha=0.8, label="$a_0$")
   action2_plot_obj,    = action_axes.plot([0], [0], 'ro--', linewidth=1, markersize=1, alpha=0.8, label="$a_1$")
@@ -379,6 +380,31 @@ void realtime_visualizer_init(std::string_view world_file, int ring_buffer_len=1
   )pyp", _p(world_file), _p(ring_buffer_len));
 }
 
+void update_target_pose(const array<float, 2>& target_pose)
+{
+  Cppyplot::cppyplot pyp;
+  pyp.raw(R"pyp(
+  target_pose_plot_obj.set_data(target_pose[0], target_pose[1])
+  
+  fig.canvas.restore_region(world_axes_bg)
+  fig.canvas.restore_region(action_axes_bg)
+  fig.canvas.restore_region(reward_axes_bg)
+
+  world_axes.draw_artist(robot_pose_plot_obj)
+  world_axes.draw_artist(target_pose_plot_obj)
+  world_axes.draw_artist(robot_traj_plot_obj)
+
+  action_axes.draw_artist(action1_plot_obj)
+  action_axes.draw_artist(action2_plot_obj)
+
+  reward_axes.draw_artist(reward_plot_obj)
+
+  fig.canvas.blit(world_axes.bbox)
+  fig.canvas.blit(action_axes.bbox)
+  fig.canvas.blit(reward_axes.bbox)
+  fig.canvas.flush_events()
+  )pyp", _p(target_pose));
+}
 void update_visualizer(const array<float, 2>& pose, 
                        const array<float, 2>& action, 
                        const float            reward,
@@ -417,6 +443,7 @@ void update_visualizer(const array<float, 2>& pose,
   fig.canvas.restore_region(reward_axes_bg)
 
   world_axes.draw_artist(robot_pose_plot_obj)
+  world_axes.draw_artist(target_pose_plot_obj)
   world_axes.draw_artist(robot_traj_plot_obj)
 
   action_axes.draw_artist(action1_plot_obj)
