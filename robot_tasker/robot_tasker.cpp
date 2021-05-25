@@ -16,7 +16,6 @@ int main()
   // auto world_barriers = ENV::read_world(WORLD_FILE);
   auto global_config  = ENV::read_global_config(CONFIG_FILE);
 
-  ENV::realtime_visualizer_init(WORLD_FILE);
   auto [actor_network, critic_network] = learn_to_drive(global_config);
 
   return EXIT_SUCCESS;
