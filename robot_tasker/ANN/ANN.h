@@ -62,6 +62,30 @@ struct ArtificialNeuralNetwork{
 };
 
 
+template<typename EigenDerived>
+auto normalize_activations(eig::ArrayBase<EigenDerived>& Z)
+{
+#ifdef _DEBUG
+  assert(Z.size() > 1);
+#endif
+  auto Z_temp = Z.eval();
+  float mean = Z.mean();
+  float var = 0.0F;
+  for (int i = 0; i < Z.rows(); i++)
+  {
+    for (int j = 0; j < Z.cols(); j++)
+    {
+      var += (Z(i, j) - mean)*(Z(i, j) - mean);
+    }
+  }
+  // float var  = Z.redux([mean](float var_left, float sample){return var_left + ((sample - mean)*(sample - mean)); });
+  var /= (Z.size()-1);
+  var += 1e-5F;
+  float std_dev = std::sqrtf(var);
+  auto Z_normalized = (Z - mean)/std_dev;
+  return Z_normalized;
+}
+
 template<int BatchSize, int InputSize, int ... NHiddenLayers, typename EigenDerived>
 auto forward_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& ann, const eig::ArrayBase<EigenDerived>& input)
         -> ANN::output_batch_t<BatchSize, NHiddenLayers...>
@@ -80,7 +104,6 @@ auto forward_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& a
     int n_nodes_last_layer = (int)ann.n_nodes(layer-1u);
     int n_nodes_cur_layer  = (int)ann.n_nodes(layer);
     int weights_start      = weights_count;
-    int weights_end        = weights_start + (n_nodes_cur_layer*n_nodes_last_layer) - 1;
     
     auto b = ann.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1));
     this_layer_activation.conservativeResize(NoChange, n_nodes_cur_layer);
@@ -93,7 +116,9 @@ auto forward_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& a
       // calculate wX + b
       auto w  = ann.weight(seq(this_node_weight_start, this_node_weight_end));
       auto wx = prev_layer_activation.matrix() * w.matrix();
-      this_layer_activation(all, node) = ann.layer_activation_func[layer-1].activation_batch(wx.array() + b(node));
+      auto z = wx.array() + b(node);
+      auto z_normalized = z;//normalize_activations(z);
+      this_layer_activation(all, node) = ann.layer_activation_func[layer-1].activation_batch(z_normalized);
     }
     prev_layer_activation.swap(this_layer_activation);
     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
@@ -135,7 +160,6 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& 
     int n_nodes_last_layer = ann.n_nodes(layer-1);
     int n_nodes_cur_layer  = ann.n_nodes(layer);
     int weights_start      = weights_count;
-    int weights_end        = weights_start + (n_nodes_cur_layer*n_nodes_last_layer) - 1;
     
     auto b = ann.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1));
     activations.emplace_back(BatchSize, n_nodes_cur_layer);
@@ -147,7 +171,9 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& 
       // calculate wX + b
       auto w  = ann.weight(seq(this_node_weight_start, this_node_weight_end));
       auto wx = (activations[layer-1].matrix() * w.matrix());
-      activations[layer](all, node) = ann.layer_activation_func[layer-1].activation_batch( (wx.array() + b(node)) );
+      auto z = wx.array() + b(node);
+      auto z_normalized = z; //normalize_activations(z);
+      activations[layer](all, node) = ann.layer_activation_func[layer-1].activation_batch( z_normalized );
     }
     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
     bias_count     += n_nodes_cur_layer;

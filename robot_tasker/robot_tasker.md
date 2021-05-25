@@ -32,19 +32,9 @@ At each time-step robot can choose
 * travel to a task location
 * travel to a charge station
 
-#### To-Do
-**Impl-0**
-* generate map
-* create node that registers global task
-* establish reward mechanism to navigate safely through the area
-
-**Impl-1**
-* establish reward mechanism to reach the task area as early as possible
-
-**Impl-2**
-* assign charging stations
-* establish reward mechanism for each percentage drop in battery
-
-**Impl-3**  
-* assign task priority
+#### To-Do revised
+* Learning to drive -- WIP
+* Learning to avoid obstacles
+* Learning to reach destination while avoiding obstacles in min time
+* Learning to prioritize task/charge
 

@@ -7,6 +7,7 @@
 #include <chrono>
 
 #include "global_typedef.h"
+#include "util.h"
 #include "cppyplot.hpp"
 
 namespace filesystem = std::filesystem;
@@ -31,24 +32,6 @@ read_global_config(const std::string& config_name)
   retval.insert(std::make_pair("cycle_time", config["cycle_time"].as<float>()));
   
   return retval;
-}
-
-template<typename ArgLeft, typename ... ArgsRight>
-auto min (ArgLeft x, ArgsRight ... y)
-{
-  typename std::common_type_t<ArgLeft, ArgsRight...> result = x;
-  ((result = ((result < y)? result : y) ), ...);
-  
-  return result;
-}
-
-template<typename ArgLeft, typename ... ArgsRight>
-auto max (ArgLeft x, ArgsRight ... y)
-{
-  typename std::common_type_t<ArgLeft, ArgsRight...> result = x;
-  ((result = ((result > y)? result : y) ), ...);
-  
-  return result;
 }
 
 template<size_t N>
@@ -79,7 +62,7 @@ bool trajectory_intersects_barrier(const vector<RL::Polynomial<1>> world_map,
                                    const RL::RobotState            robot_state)
 {
   bool path_intersects_with_barrier = false;
-  size_t n_cycles = 5u;
+  // size_t n_cycles = 5u;
   float dt        = 0.04F;
   RL::Array<float, 3> Y; 
   RL::Matrix<float, 3, 3> X;

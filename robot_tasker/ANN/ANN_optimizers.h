@@ -36,10 +36,12 @@ class AdamOptimizer{
     eig::Array<float, eig::Dynamic, 1> dw_momentum_;
     eig::Array<float, eig::Dynamic, 1> db_momentum_;
     float momentum_step_;
+    float momentum_step_pow_;
 
     eig::Array<float, eig::Dynamic, 1> dw_sq_;
     eig::Array<float, eig::Dynamic, 1> db_sq_;
     float grad_sq_step_;
+    float grad_sq_step_pow_;
     size_t optim_counter_;
   public:
     AdamOptimizer(int n_weights, int n_bias, float step_size=1e-3F, float momentum_step=0.90F, float grad_sq_step=0.99F)
@@ -55,6 +57,8 @@ class AdamOptimizer{
       grad_sq_step_  = grad_sq_step;
       
       optim_counter_  = 0u;
+      momentum_step_pow_ = 1.0F;
+      grad_sq_step_pow_  = 1.0F;
     }
 
     template<typename EigenDerived1, typename EigenDerived2, typename EigenDerived3, typename EigenDerived4>
@@ -95,8 +99,10 @@ class AdamOptimizer{
         db_sq_ += (1.0F - grad_sq_step_)*db_sq;
       }
       
-      float momentum_bias_correction   = 1.0F/(1.0F - powf(momentum_step_, (float)optim_counter_)); // TODO: potential powf optimization
-      float grad_sq_bias_correction = 1.0F/(1.0F - powf(grad_sq_step_, (float)optim_counter_));  // TODO: potential powf optimization
+      momentum_step_pow_ *= momentum_step_;
+      grad_sq_step_pow_  *= grad_sq_step_;
+      float momentum_bias_correction   = 1.0F/(1.0F - momentum_step_pow_);
+      float grad_sq_bias_correction = 1.0F/(1.0F - grad_sq_step_pow_);
       auto dw_momentum_corrected  = dw_momentum_*momentum_bias_correction;
       auto db_momentum_corrected  = db_momentum_*momentum_bias_correction;
       auto dw_sq_corrected        = dw_sq_*grad_sq_bias_correction;
@@ -109,7 +115,6 @@ class AdamOptimizer{
       weights -= delta_w;
       bias    -= delta_b;
     }
-
 
 };
 

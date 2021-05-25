@@ -8,8 +8,8 @@ namespace ANN
 
 enum InitializerIdentifier{
   RANDOM,
-  XAVIER,
-  HE
+  XAVIER_UNIFORM,
+  HE_UNIFORM
 };
 
 enum ActivationIdentifier{
@@ -60,10 +60,10 @@ class Initializer{
       float std_dev = 0.1F;
       switch(init_type_)
       {
-        case XAVIER:
+        case XAVIER_UNIFORM:
           std_dev = 1.0F/std::sqrtf((float)n_nodes_last_layer);
           break;
-        case HE:
+        case HE_UNIFORM:
           std_dev = 2.0F/std::sqrtf((float)n_nodes_last_layer);
           break;
         case RANDOM:
@@ -71,22 +71,21 @@ class Initializer{
           std_dev = 0.1F;
           break;
       }
-      std::normal_distribution<float> weights_dist(0.0F, std_dev);
-      std::uniform_real_distribution<float> bias_dist(0.05F, 0.5F);
+      std::uniform_real_distribution<float> weights_dist(-std_dev, std_dev);
       
       // fill weights
-      float norm = 0.0F;
       for (size_t i = 0u; i < (size_t)weights.size(); i++)
       {
-        weights[i] = weights_dist(rand_gen_); 
-        norm += weights[i]*weights[i];
+        weights[i] = weights_dist(rand_gen_);
+        (void)weights_dist(rand_gen_);
       }
-      norm = std::sqrtf(norm);
-      weights /= norm;
 
       // fill bias
       for (size_t i = 0u; i < (size_t)bias.size(); i++)
-      {  bias[i] = bias_dist(rand_gen_);  }
+      {
+        bias[i] = 0.0F;//0.5F*weights_dist(rand_gen_);
+        // (void)weights_dist(rand_gen_);
+      }
     }
 };
 
