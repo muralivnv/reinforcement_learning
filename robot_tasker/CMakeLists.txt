@@ -10,7 +10,7 @@ set(EIGEN_OPTIONS -DEIGEN_INITIALIZE_MATRICES_BY_ZERO -DEIGEN_NO_AUTOMATIC_RESIZ
 set(DEBUG_COMPILER_OPTIONS /EHsc /Zi /RTC1 /MDd ${EIGEN_OPTIONS})
 set(RELEASE_COMPILER_OPTIONS /W4 /w14640 /EHsc /openmp /O2 /fp:precise /F2048 /arch:AVX2 ${EIGEN_OPTIONS})
 
-add_executable(${PROJECT_NAME} robot_tasker.cpp)
+add_executable(${PROJECT_NAME} robot_tasker.cpp learning/to_drive_util.cpp)
 
 target_compile_options(${PROJECT_NAME} PRIVATE "$<$<CONFIG:DEBUG>:${DEBUG_COMPILER_OPTIONS}>")
 target_compile_options(${PROJECT_NAME} PRIVATE "$<$<CONFIG:RELEASE>:${RELEASE_COMPILER_OPTIONS}>")

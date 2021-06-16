@@ -2,10 +2,7 @@
 #define _ANN_TYPE_TRAITS_H_
 
 // Length
-template<int...Rest> struct pack_len;
-template<int Head, int ...Rest>
-struct pack_len<Head, Rest...> { static const int value = 1+pack_len<Rest...>::value; };
-template<> struct pack_len<>   { static const int value = 0;};
+template<int...Rest> struct pack_len { static const int value = sizeof...(Rest); };
 
 // Sum
 template<int...Rest> struct pack_add;

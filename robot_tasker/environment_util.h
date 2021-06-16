@@ -50,8 +50,8 @@ float eval_poly(RL::Polynomial<N> polynomial, float value)
 template<size_t M, size_t N>
 float poly_diff(RL::Polynomial<M> poly1, RL::Polynomial<N> poly2, float value)
 {
-  float min_x = min(poly1.bound_1.x, poly1.bound_2.x, poly2.bound_1.x, poly2.bound_2.x);
-  float max_x = max(poly1.bound_1.x, poly1.bound_2.x, poly2.bound_1.x, poly2.bound_2.x);
+  float min_x = RL::min(poly1.bound_1.x, poly1.bound_2.x, poly2.bound_1.x, poly2.bound_2.x);
+  float max_x = RL::max(poly1.bound_1.x, poly1.bound_2.x, poly2.bound_1.x, poly2.bound_2.x);
 
   value = std::clamp(value, min_x, max_x);
 
