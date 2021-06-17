@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <chrono>
 
-#include "global_typedef.h"
+#include "../global_typedef.h"
 #include "util.h"
 #include "cppyplot.hpp"
 
@@ -14,25 +14,6 @@ namespace filesystem = std::filesystem;
 
 namespace ENV
 {
-std::unordered_map<std::string, float>
-read_global_config(const std::string& config_name)
-{
-  std::unordered_map<std::string, float> retval;
-  yml::Node config = yml::LoadFile(config_name);
-
-  yml::Node node = config["world"]["size"];
-  retval.insert(std::make_pair("world/size/x", node[0].as<float>()));
-  retval.insert(std::make_pair("world/size/y", node[0].as<float>()));
-
-  yml::Node robot_config = config["robot"];
-  retval.insert(std::make_pair("robot/max_wheel_speed", robot_config["max_wheel_speed"].as<float>()));
-  retval.insert(std::make_pair("robot/wheel_radius", robot_config["wheel_radius"].as<float>()));
-  retval.insert(std::make_pair("robot/base_length", robot_config["base_length"].as<float>()));
-
-  retval.insert(std::make_pair("cycle_time", config["cycle_time"].as<float>()));
-  
-  return retval;
-}
 
 template<size_t N>
 float eval_poly(RL::Polynomial<N> polynomial, float value)
@@ -56,6 +37,27 @@ float poly_diff(RL::Polynomial<M> poly1, RL::Polynomial<N> poly2, float value)
   value = std::clamp(value, min_x, max_x);
 
   return (eval_poly(poly1, value) - eval_poly(poly2, value));
+}
+
+
+std::unordered_map<std::string, float>
+read_global_config(const std::string& config_name)
+{
+  std::unordered_map<std::string, float> retval;
+  yml::Node config = yml::LoadFile(config_name);
+
+  yml::Node node = config["world"]["size"];
+  retval.insert(std::make_pair("world/size/x", node[0].as<float>()));
+  retval.insert(std::make_pair("world/size/y", node[0].as<float>()));
+
+  yml::Node robot_config = config["robot"];
+  retval.insert(std::make_pair("robot/max_wheel_speed", robot_config["max_wheel_speed"].as<float>()));
+  retval.insert(std::make_pair("robot/wheel_radius", robot_config["wheel_radius"].as<float>()));
+  retval.insert(std::make_pair("robot/base_length", robot_config["base_length"].as<float>()));
+
+  retval.insert(std::make_pair("cycle_time", config["cycle_time"].as<float>()));
+  
+  return retval;
 }
 
 bool trajectory_intersects_barrier(const vector<RL::Polynomial<1>> world_map, 
@@ -200,92 +202,7 @@ void initiate_new_world(std::string_view file_to_save)
   )pyp", _p(file_to_save));
 }
 
-vector<RL::Polynomial<3>> read_world(const string& world_barrier, int load_old_file = 0)
-{
-  if (filesystem::exists(world_barrier) && (load_old_file == 0))
-  {
-    std::cout << "World map file, \n\t"<< world_barrier << " \nexist. \n Load this file? [1/0]: ";
-    std::cin >> load_old_file; 
-  }
-  
-  if (load_old_file == 0)
-  {  
-    initiate_new_world(world_barrier);
-
-    if (filesystem::exists(world_barrier))
-    { std::system( ("del " + world_barrier).c_str() ); }
-    
-    while (!filesystem::exists(world_barrier))
-    {  std::this_thread::sleep_for(500ms);  }
-
-    std::this_thread::sleep_for(500ms);
-  }
-  
-  vector<RL::Polynomial<3>> barriers;
-  barriers.reserve(10);
-  std::ifstream in_file(world_barrier);
-  if (in_file.is_open())
-  {
-    std::stringstream file_buf;
-    file_buf << in_file.rdbuf();
-    string line;
-    
-    // read and skip first line (header)
-    std::getline(file_buf, line);
-    while(std::getline(file_buf, line))
-    {
-      if (!line.empty())
-      {
-        string data;
-        float x_left, y_left, x_right, y_right;
-        float c3, c2, c1, c0;
-        std::stringstream line_buf (line);
-        
-        std::getline(line_buf, data, ',');
-        str2float(data, x_left);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, y_left);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, x_right);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, y_right);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, c3);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, c2);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, c1);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, c0);
-
-        barriers.push_back(RL::Polynomial<3>());
-        auto& this_poly = barriers.back();
-        this_poly.coeff[0]  = c0;
-        this_poly.coeff[1]  = c1;
-        this_poly.coeff[2]  = c2;
-        this_poly.coeff[3]  = c3;
-        this_poly.offset    = 0.0F;
-        this_poly.bound_1.x = x_left;
-        this_poly.bound_1.y = y_left;
-        this_poly.bound_2.x = x_right;
-        this_poly.bound_2.y = y_right;
-      }
-    }
-  }
-  in_file.close();
-
-  barriers.shrink_to_fit();
-  return barriers;
-}
-
-void realtime_visualizer_init(std::string_view world_file, int ring_buffer_len=10)
+void realtime_visualizer_init(std::string_view world_file, int ring_buffer_len)
 {
   Cppyplot::cppyplot pyp;
   pyp.raw(R"pyp(
@@ -388,10 +305,11 @@ void update_target_pose(const array<float, 2>& target_pose)
   fig.canvas.flush_events()
   )pyp", _p(target_pose));
 }
+
 void update_visualizer(const array<float, 2>& pose, 
                        const array<float, 2>& action, 
                        const float            reward,
-                       int ring_buffer_len=10)
+                       int ring_buffer_len)
 {
   Cppyplot::cppyplot pyp;
 
@@ -441,6 +359,93 @@ void update_visualizer(const array<float, 2>& pose,
 
   )pyp", _p(pose), _p(action), _p(reward), _p(ring_buffer_len));
 }
+                       
+vector<RL::Polynomial<3>> read_world(const string& world_barrier, int load_old_file)
+{
+  if (filesystem::exists(world_barrier) && (load_old_file == 0))
+  {
+    std::cout << "World map file, \n\t"<< world_barrier << " \nexist. \n Load this file? [1/0]: ";
+    std::cin >> load_old_file; 
+  }
+  
+  if (load_old_file == 0)
+  {  
+    initiate_new_world(world_barrier);
+
+    if (filesystem::exists(world_barrier))
+    { std::system( ("del " + world_barrier).c_str() ); }
+    
+    while (!filesystem::exists(world_barrier))
+    {  std::this_thread::sleep_for(500ms);  }
+
+    std::this_thread::sleep_for(500ms);
+  }
+  
+  vector<RL::Polynomial<3>> barriers;
+  barriers.reserve(10);
+  std::ifstream in_file(world_barrier);
+  if (in_file.is_open())
+  {
+    std::stringstream file_buf;
+    file_buf << in_file.rdbuf();
+    string line;
+    
+    // read and skip first line (header)
+    std::getline(file_buf, line);
+    while(std::getline(file_buf, line))
+    {
+      if (!line.empty())
+      {
+        string data;
+        float x_left, y_left, x_right, y_right;
+        float c3, c2, c1, c0;
+        std::stringstream line_buf (line);
+        
+        std::getline(line_buf, data, ',');
+        str2float(data, x_left);
+
+        std::getline(line_buf, data, ',');
+        str2float(data, y_left);
+
+        std::getline(line_buf, data, ',');
+        str2float(data, x_right);
+
+        std::getline(line_buf, data, ',');
+        str2float(data, y_right);
+
+        std::getline(line_buf, data, ',');
+        str2float(data, c3);
+
+        std::getline(line_buf, data, ',');
+        str2float(data, c2);
+
+        std::getline(line_buf, data, ',');
+        str2float(data, c1);
+
+        std::getline(line_buf, data, ',');
+        str2float(data, c0);
+
+        barriers.push_back(RL::Polynomial<3>());
+        auto& this_poly = barriers.back();
+        this_poly.coeff[0]  = c0;
+        this_poly.coeff[1]  = c1;
+        this_poly.coeff[2]  = c2;
+        this_poly.coeff[3]  = c3;
+        this_poly.offset    = 0.0F;
+        this_poly.bound_1.x = x_left;
+        this_poly.bound_1.y = y_left;
+        this_poly.bound_2.x = x_right;
+        this_poly.bound_2.y = y_right;
+      }
+    }
+  }
+  in_file.close();
+
+  barriers.shrink_to_fit();
+  return barriers;
+}
+
+
 } // namespace {ENV}
 
 #endif

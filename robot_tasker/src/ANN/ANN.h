@@ -212,7 +212,7 @@ auto gradient_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& 
   return retval;
 }
 
-template<int BatchSize, int InputSize, int ... NHiddenLayers, typename EigenDerived1, typename EigenDerived2, 
+template<int BatchSize, int InputSize, int ... NHiddenLayers, typename EigenDerived1, 
          typename LossFcn_t, typename LossGradFcn_t>
 auto gradient_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>&  ann, 
                     const eig::ArrayBase<EigenDerived1>&                         input,

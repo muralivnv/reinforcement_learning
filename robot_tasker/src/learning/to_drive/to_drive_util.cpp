@@ -16,7 +16,7 @@ init_new_episode(std::uniform_real_distribution<float>& state_x_sample,
                  std::uniform_real_distribution<float>& state_psi_sample, 
                  std::mt19937& rand_gen)
 {
-  tuple ret_val = std::make_tuple(RL::DifferentialRobotState(), DifferentialRobotState());
+  tuple ret_val = std::make_tuple(RL::DifferentialRobotState(), RL::DifferentialRobotState());
   auto& [init_state, final_state] = ret_val;
   
   init_state.x   = state_x_sample(rand_gen);
@@ -47,7 +47,7 @@ void state_normalize(const RL::GlobalConfig_t&               global_config,
                                                   + (world_max_y)*(world_max_y) );
   static const float max_heading_error = PI;
 
-  policy_state(0, 0) /= max_pose_error;
+  policy_state(0, 0) /= max_range_error;
   policy_state(0, 1) /= max_heading_error;
 }
 

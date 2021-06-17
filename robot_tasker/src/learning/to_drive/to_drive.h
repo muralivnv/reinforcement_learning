@@ -3,21 +3,22 @@
 #include <random>
 #include <cmath>
 
-#include "../global_typedef.h"
+#include "../../global_typedef.h"
 
-#include "../ANN/ANN_activation.h"
-#include "../ANN/ANN.h"
-#include "../ANN/ANN_optimizers.h"
+#include "../../ANN/ANN_activation.h"
+#include "../../ANN/ANN.h"
+#include "../../ANN/ANN_optimizers.h"
 
-#include "../util.h"
+#include "../../util/util.h"
+
 #include "robot_dynamics.h"
 #include "to_drive_util.h"
 
 using namespace ANN;
+using namespace RL;
 
 // local parameters
-static const TargetReachSuccessParams target_reach_params = {.min_req_range_error_to_target = 1.0F, 
-                                                             .min_req_heading_error_to_target = deg2rad(5.0F)};
+static const TargetReachSuccessParams target_reach_params = TargetReachSuccessParams{1.0F, deg2rad(5.0F)};
 
 // reward calculation parameters
 // normalized range error reward calculation
@@ -52,38 +53,42 @@ float calc_reward(eig::Array<float, 1, 2, eig::RowMajor>& normalized_policy_stat
 }
 
 
-float actor_loss_fcn(const eig::Array<float, eig::Dynamic, 2>& action)
+float actor_loss_fcn(const eig::Array<float, eig::Dynamic, 1>& Q)
 {
-  // TODO: Fill this properly, output layer is actions for actor network
-
-  return 0;
-}
-
-eig::Array<float, eig::Dynamic, 2>
-actor_loss_grad(const eig::Array<float, eig::Dynamic, 2>& action)
-{
-  // TODO: Fill this properly, output layer is actions for actor network
-  return action;
+  // J_actor = -(1/2N)* summation ((Q)^2)
+  float loss = -0.5F* (Q.square()).sum();
+  return loss;
 }
 
 
-float critic_loss_fcn(const eig::Array<float, eig::Dynamic, 1>& G)
+eig::Array<float, eig::Dynamic, 1>
+actor_loss_grad(const eig::Array<float, eig::Dynamic, 1>& Q)
 {
-  return G.mean();
-}
-
-
-eig::Array<float, eig::Dynamic, 1> 
-critic_loss_grad(const eig::Array<float, eig::Dynamic, 1>& G)
-{
-  eig::Array<float, eig::Dynamic, 1> grad(G.rows(), 1);
-  grad.fill(1.0F);
-
+  eig::Array<float, eig::Dynamic, 1> grad = -Q;
   return grad;
 }
 
 
-void learn_to_drive(const RL::GlobalConfig& global_config)
+float critic_loss_fcn(const eig::Array<float, eig::Dynamic, 1>& Q, 
+                      const eig::Array<float, eig::Dynamic, 1>& td_error)
+{
+  UNUSED(Q);
+  float loss = 0.5F * (td_error.square()).sum();
+  return loss;
+}
+
+
+eig::Array<float, eig::Dynamic, 1> 
+critic_loss_grad(const eig::Array<float, eig::Dynamic, 1>& Q, 
+                 const eig::Array<float, eig::Dynamic, 1>& td_error)
+{
+  UNUSED(Q);
+  eig::Array<float, eig::Dynamic, 1> grad = -td_error;
+  return grad;
+}
+
+
+void learn_to_drive(const RL::GlobalConfig_t& global_config)
 {
   static const float& world_max_x = global_config.at("world/size/x"); 
   static const float& world_max_y = global_config.at("world/size/y"); 
@@ -201,14 +206,21 @@ void learn_to_drive(const RL::GlobalConfig& global_config)
         Q_now = forward_batch<batch_size>(critic, replay_buffer(n_transitions, {S0, S1, A0, A1}));
 
         // calculate temporal difference = R + gamma*Q(S_next, A_next) - Q(S_now, A_now)
-        td_error = replay_buffer(n_transitions, R) + (discount_factor*replay_buffer(n_transitions, EPISODE_STATE)*Q_next) - Q_now;
+        td_error = replay_buffer(n_transitions, (int)R) + (discount_factor*replay_buffer(n_transitions, (int)EPISODE_STATE)*Q_next) - Q_now;
 
-        // calculate gradient of actor network // TODO: Define this
-        auto [actor_loss, actor_weight_grad, actor_bias_grad] = foo();
-
-        // calculate gradient of critic network // TODO: Define this
-        auto [critic_loss, critic_weight_grad, critic_bias_grad] = bar();
-
+        // calculate gradient of actor network
+        auto [actor_loss, actor_weight_grad, actor_bias_grad] = actor_gradient_batch<batch_size>(actor, 
+                                                                                                 critic, 
+                                                                                                 replay_buffer(n_transitions, {S0, S1}),
+                                                                                                 actor_loss_fcn,
+                                                                                                 actor_loss_grad, 
+                                                                                                 global_config);
+        // calculate gradient of critic network
+        auto [critic_loss, critic_weight_grad, critic_bias_grad] = gradient_batch<batch_size>(critic, 
+                                                                                              replay_buffer(n_transitions, {S0, S1, A0, A1}),
+                                                                                              td_error,
+                                                                                              critic_loss_fcn,
+                                                                                              critic_loss_grad);
         // update parameters of actor using optimizer
         actor_opt.step(actor_weight_grad, actor_bias_grad, actor.weight, actor.bias);
 

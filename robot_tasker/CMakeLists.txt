@@ -7,10 +7,13 @@ set(CMAKE_CXX_COMPILER_TARGET amd64)
 set(CMAKE_CXX_STANDARD 17)
 
 set(EIGEN_OPTIONS -DEIGEN_INITIALIZE_MATRICES_BY_ZERO -DEIGEN_NO_AUTOMATIC_RESIZING -DEIGEN_STACK_ALLOCATION_LIMIT=0)
-set(DEBUG_COMPILER_OPTIONS /EHsc /Zi /RTC1 /MDd ${EIGEN_OPTIONS})
+set(DEBUG_COMPILER_OPTIONS /EHsc /Zi /RTC1 /MDd /INCREMENTAL:NO ${EIGEN_OPTIONS})
 set(RELEASE_COMPILER_OPTIONS /W4 /w14640 /EHsc /openmp /O2 /fp:precise /F2048 /arch:AVX2 ${EIGEN_OPTIONS})
 
-add_executable(${PROJECT_NAME} robot_tasker.cpp learning/to_drive_util.cpp)
+add_executable(${PROJECT_NAME} src/robot_tasker.cpp 
+                               src/learning/to_drive/to_drive_util.cpp
+                               src/learning/to_drive/robot_dynamics.cpp
+                               src/util/util.cpp)
 
 target_compile_options(${PROJECT_NAME} PRIVATE "$<$<CONFIG:DEBUG>:${DEBUG_COMPILER_OPTIONS}>")
 target_compile_options(${PROJECT_NAME} PRIVATE "$<$<CONFIG:RELEASE>:${RELEASE_COMPILER_OPTIONS}>")

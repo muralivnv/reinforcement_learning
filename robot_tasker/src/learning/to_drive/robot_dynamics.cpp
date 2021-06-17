@@ -1,7 +1,7 @@
-#ifndef _ROBOT_DYNAMICS_H_
-#define _ROBOT_DYNAMICS_H_
+#include "robot_dynamics.h"
 
-#include "../global_typedef.h"
+namespace RL
+{
 
 RL::DifferentialRobotState differential_robot(const RL::DifferentialRobotState& cur_state, 
                                               const RL::Action2D&               cmd_vel, 
@@ -25,7 +25,9 @@ RL::DifferentialRobotState differential_robot(const RL::DifferentialRobotState& 
   return next_state;
 }
 
-RL::DifferentialRobotState operator-(const RL::DifferentialRobotState& lhs, const RL::DifferentialRobotState& rhs)
+RL::DifferentialRobotState 
+robot_state_diff(const RL::DifferentialRobotState& lhs, 
+                 const RL::DifferentialRobotState& rhs)
 {
   RL::DifferentialRobotState diff;
   diff.x   = lhs.x - rhs.x;
@@ -35,5 +37,4 @@ RL::DifferentialRobotState operator-(const RL::DifferentialRobotState& lhs, cons
   return diff;
 }
 
-
-#endif
+} // namespace {RL}
