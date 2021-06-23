@@ -9,7 +9,6 @@
 
 namespace ANN{
 
-// template<int N>
 void gradient_clipping(const float threshold, eig::Ref<eig::ArrayXf> gradient)
 {
   float gradient_norm = std::sqrtf(gradient.square().sum());

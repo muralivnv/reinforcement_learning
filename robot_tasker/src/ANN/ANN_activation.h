@@ -201,7 +201,7 @@ class XavierUniform : public InitializerBase
       std::random_device seed;
       std::mt19937 rand_gen(seed());
       std::uniform_real_distribution<float> param_dist(-bound, bound);
-      auto param_filler = [rand_gen, param_dist](float val){val = param_dist(rand_gen); param_dist(rand_gen); };
+      auto param_filler = [&rand_gen, &param_dist](float val){val = param_dist(rand_gen); (void)param_dist(rand_gen); };
 
       std::for_each(weights.begin(), weights.end(), param_filler);
       std::for_each(bias.begin(), bias.end(), param_filler);
@@ -211,7 +211,7 @@ class XavierUniform : public InitializerBase
 class HeUniform : public InitializerBase
 {
   public:
-    void initializer(const int n_nodes_prev_layer, 
+    void initialize(const int n_nodes_prev_layer, 
                      eig::Ref<eig::ArrayXf> weights, 
                      eig::Ref<eig::ArrayXf> bias) const override
     {
@@ -219,7 +219,7 @@ class HeUniform : public InitializerBase
       std::random_device seed;
       std::mt19937 rand_gen(seed());
       std::uniform_real_distribution<float> param_dist(-bound, bound);
-      auto param_filler = [rand_gen, param_dist](float val){val = param_dist(rand_gen); param_dist(rand_gen); };
+      auto param_filler = [&rand_gen, &param_dist](float val){val = param_dist(rand_gen); (void)param_dist(rand_gen); };
 
       std::for_each(weights.begin(), weights.end(), param_filler);
       std::for_each(bias.begin(), bias.end(), param_filler);
@@ -249,7 +249,7 @@ class NoActivation : public ActivationBase
       out = wx_b;
     }
     
-    void activation(const float wx_b, float& out) const override;
+    void activation(const float wx_b, float& out) const override
     {
       out = wx_b;
     }
@@ -271,7 +271,7 @@ class Sigmoid : public ActivationBase
       out = 1.0F/(1.0F + eig::exp(-wx_b));
     }
     
-    void activation(const float wx_b, float& out) const override;
+    void activation(const float wx_b, float& out) const override
     {
       out = 1.0F/(1.0F + std::expf(-wx_b));
     }
@@ -293,7 +293,7 @@ class ReLU : public ActivationBase
       out = wx_b.unaryExpr([](float v){return v < 0.0F?0.0F:v; });
     }
     
-    void activation(const float wx_b, float& out) const override;
+    void activation(const float wx_b, float& out) const override
     {
       out = (wx_b < 0.0F)?0.0F:wx_b;
     }
@@ -320,7 +320,7 @@ class LeakyReLU : public ActivationBase
       out = wx_b.unaryExpr([this](float v){return v < 0.0F?this->leakyness_factor_*v:v; });
     }
     
-    void activation(const float wx_b, float& out) const override;
+    void activation(const float wx_b, float& out) const override
     {
       out = (wx_b < 0.0F)?this->leakyness_factor_*wx_b:wx_b;
     }
