@@ -99,7 +99,7 @@ auto actor_gradient_batch(const ANN::ArtificialNeuralNetwork<ActorInputSize, Act
   actor_activations.reserve(actor_n_layers);
   critic_activations.reserve(critic_n_layers);
   critic_activations.emplace_back(Activation_t(BatchSize, 4));
-  critic_activations[0](all, {0, 1}) = input;
+  critic_activations[0](all, {S0, S1}) = input;
   actor_activations.emplace_back(input);
 
   // calculate and store activations at each layer for actor_network
@@ -122,19 +122,16 @@ auto actor_gradient_batch(const ANN::ArtificialNeuralNetwork<ActorInputSize, Act
       auto w  = actor_network.weight(seq(this_node_weight_start, this_node_weight_end));
       auto wx = (actor_activations[layer-1].matrix() * w.matrix());
       auto z = wx.array() + b(node);
-      auto z_normalized = z;//normalize_activations(z);
-
-      actor_activations[layer](all, node) = actor_network.layer_activation_func[layer-1].activation_batch( z_normalized );
+      actor_activations[layer](all, node) = actor_network.layer_activation_func[layer-1].activation_batch(z);
     }
     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
     bias_count     += n_nodes_cur_layer;
   }
-  //normalize actor_network actions
-  critic_activations[0](all, {2, 3}) = actor_activations.back();
-  critic_activations[0](all, 2) = critic_activations[0](all, 2).unaryExpr([](float a){return std::clamp(a, -4.0F, 4.0F); });
-  critic_activations[0](all, 3) = critic_activations[0](all, 3).unaryExpr([](float a){return std::clamp(a, -4.0F, 4.0F); });
 
-  // action_normalize(global_config, critic_activations[0](all, {2, 3}));
+  // clamp actions
+  actor_activations.back()(all, 0)     = actor_activations.back()(all, 0).unaryExpr([action1_max](float a){return std::clamp(a, -action1_max, action1_max); });
+  actor_activations.back()(all, 1)     = actor_activations.back()(all, 1).unaryExpr([action2_max](float a){return std::clamp(a, -action2_max, action2_max); });
+  critic_activations[0](all, {A0, A1}) = actor_activations.back();
 
   // calculate and store activations at each layer for critic_network
   weights_count = 0;
@@ -156,8 +153,7 @@ auto actor_gradient_batch(const ANN::ArtificialNeuralNetwork<ActorInputSize, Act
       auto w  = critic_network.weight(seq(this_node_weight_start, this_node_weight_end));
       auto wx = (critic_activations[layer-1].matrix() * w.matrix());
       auto z = wx.array() + b(node);
-      auto z_normalized = z;//normalize_activations(z);
-      critic_activations[layer](all, node) = critic_network.layer_activation_func[layer-1].activation_batch( z_normalized );
+      critic_activations[layer](all, node) = critic_network.layer_activation_func[layer-1].activation_batch(z);
     }
     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
     bias_count     += n_nodes_cur_layer;
@@ -219,7 +215,7 @@ auto actor_gradient_batch(const ANN::ArtificialNeuralNetwork<ActorInputSize, Act
   }
 
   // calculate gradient for the actor_network
-  delta_to_here = delta(all, {2, 3}); // only take gradient with respect to action_0 and action_1
+  delta_to_here = delta(all, {A0, A1}); // only take gradient with respect to action_0 and action_1
   next_layer_weights_end = 0, next_layer_weights_start = (int)actor_network.weight.rows();
   next_layer_bias_end = 0, next_layer_bias_start = (int)actor_network.bias.rows();
   for (int layer = actor_network.n_layers; layer != 0; layer--)
@@ -249,8 +245,8 @@ auto actor_gradient_batch(const ANN::ArtificialNeuralNetwork<ActorInputSize, Act
     weight_start = weight_end - (n_nodes_this_layer*n_nodes_prev_layer) + 1;
     bias_end     = next_layer_bias_start - 1;
     bias_start   = bias_end - n_nodes_this_layer + 1;
-   for (int node = 0; node < n_nodes_this_layer; node++)
-   {
+    for (int node = 0; node < n_nodes_this_layer; node++)
+    {
       auto temp = delta(all, node);
       for (int j = 0; j < n_nodes_prev_layer; j++)
       {
@@ -258,7 +254,8 @@ auto actor_gradient_batch(const ANN::ArtificialNeuralNetwork<ActorInputSize, Act
         weight_grad(weight_start+(node*n_nodes_prev_layer)+j) = weight_grad_list.mean();
       }
       bias_grad(bias_start+node) = temp.mean();
-   }
+    }
+
     delta_to_here.swap(delta);
 
     next_layer_weights_end   = weight_end;

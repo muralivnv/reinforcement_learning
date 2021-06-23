@@ -8,6 +8,7 @@
 #include "../../ANN/ANN_activation.h"
 #include "../../ANN/ANN.h"
 #include "../../ANN/ANN_optimizers.h"
+#include "../../ANN/ANN_util.h"
 
 #include "../../util/util.h"
 
@@ -25,19 +26,18 @@ static const TargetReachSuccessParams target_reach_params = TargetReachSuccessPa
 static const float normalized_range_error_reward_interp_x1 = 0.01F;
 static const float normalized_range_error_reward_interp_y1 = -1.0F;
 static const float normalized_range_error_reward_interp_x2 = 0.80F;
-static const float normalized_range_error_reward_interp_y2 = -50.0F;
+static const float normalized_range_error_reward_interp_y2 = -5.0F;
 
 // normalized heading error reward calculation
 static const float normalized_heading_error_reward_interp_x1 = 0.01F;
 static const float normalized_heading_error_reward_interp_y1 = -1.0F;
 static const float normalized_heading_error_reward_interp_x2 = 0.80F;
-static const float normalized_heading_error_reward_interp_y2 = -60.0F;
+static const float normalized_heading_error_reward_interp_y2 = -6.0F;
 
 // reward discount factor
 static const float discount_factor = 1.0F;
 
 // function definitions
-
 float calc_reward(eig::Array<float, 1, 2, eig::RowMajor>& normalized_policy_state)
 {
   // calculate reward for position error
@@ -55,8 +55,8 @@ float calc_reward(eig::Array<float, 1, 2, eig::RowMajor>& normalized_policy_stat
 
 float actor_loss_fcn(const eig::Array<float, eig::Dynamic, 1>& Q)
 {
-  // J_actor = -(1/2N)* summation ((Q)^2)
-  float loss = -0.5F* (Q.square()).sum();
+  // J_actor = -(1/N)* summation (Q)
+  float loss = -(Q.mean());
   return loss;
 }
 
@@ -64,7 +64,8 @@ float actor_loss_fcn(const eig::Array<float, eig::Dynamic, 1>& Q)
 eig::Array<float, eig::Dynamic, 1>
 actor_loss_grad(const eig::Array<float, eig::Dynamic, 1>& Q)
 {
-  eig::Array<float, eig::Dynamic, 1> grad = -Q;
+  eig::Array<float, eig::Dynamic, 1> grad(Q.rows(), 1);
+  grad.fill(-1.0F);
   return grad;
 }
 
@@ -73,7 +74,7 @@ float critic_loss_fcn(const eig::Array<float, eig::Dynamic, 1>& Q,
                       const eig::Array<float, eig::Dynamic, 1>& td_error)
 {
   UNUSED(Q);
-  float loss = 0.5F * (td_error.square()).sum();
+  float loss = 0.5F * (td_error.square()).mean();
   return loss;
 }
 
@@ -100,16 +101,16 @@ void learn_to_drive(const RL::GlobalConfig_t& global_config)
   constexpr size_t max_episodes                = 200u; 
   constexpr size_t warm_up_cycles              = 4u*batch_size;
   constexpr size_t replay_buffer_size          = 20u*batch_size;
-  constexpr float  critic_target_smoothing_factor = 0.97F;
-
+  constexpr float  critic_target_smoothing_factor = 0.999F;
+  constexpr float gradient_norm_threshold         = 0.5F;
   // experience replay setup
   eig::Array<float, eig::Dynamic, BUFFER_LEN, eig::RowMajor> replay_buffer;
 
   // function approximation setup
   ArtificialNeuralNetwork<2, 8, 12, 20, 25, 2> actor;
   ArtificialNeuralNetwork<4, 10, 14, 21, 27, 1> critic, critic_target;
-  AdamOptimizer actor_opt((int)actor.weight.rows(), (int)actor.bias.rows(), 1e-3F);
-  AdamOptimizer critic_opt((int)critic.weight.rows(), (int)critic.bias.rows(), 1e-3F);
+  AdamOptimizer actor_opt((int)actor.weight.rows(), (int)actor.bias.rows(), 1e-5F);
+  AdamOptimizer critic_opt((int)critic.weight.rows(), (int)critic.bias.rows(), 1e-7F);
 
   actor.dense(Activation(RELU, HE_UNIFORM), 
               Activation(RELU, HE_UNIFORM),
@@ -221,6 +222,20 @@ void learn_to_drive(const RL::GlobalConfig_t& global_config)
                                                                                               td_error,
                                                                                               critic_loss_fcn,
                                                                                               critic_loss_grad);
+
+        // testing code --start !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        // gradient_clipping(gradient_norm_threshold, critic_weight_grad);
+        // gradient_clipping(gradient_norm_threshold, critic_bias_grad);
+        // gradient_clipping(gradient_norm_threshold, actor_weight_grad);
+        // gradient_clipping(gradient_norm_threshold, actor_bias_grad);
+
+        float actor_weight_grad_norm  = std::sqrtf(actor_weight_grad.square().sum());
+        float actor_bias_grad_norm    = std::sqrtf(actor_bias_grad.square().sum());
+        float critic_weight_grad_norm = std::sqrtf(critic_weight_grad.square().sum());
+        float critic_bias_grad_norm   = std::sqrtf(critic_bias_grad.square().sum());
+
+        // testing code --end !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
         // update parameters of actor using optimizer
         actor_opt.step(actor_weight_grad, actor_bias_grad, actor.weight, actor.bias);
 
@@ -229,10 +244,15 @@ void learn_to_drive(const RL::GlobalConfig_t& global_config)
 
         // soft-update target network
         soft_update_network(critic, critic_target_smoothing_factor, critic_target);
+
+        std::cout << "E: " << episode_count << " | C: " << cycle_count 
+                  << " | ALoss: " << actor_loss << " | CLoss: " << critic_loss 
+                  << " | A_wgNorm: " << actor_weight_grad_norm << " | A_bgNorm: " << actor_bias_grad_norm
+                  << " | C_wgNorm: " << critic_weight_grad_norm << " | C_bgNorm: " << critic_bias_grad_norm << '\n';
       }
       cur_state     = next_state;
       policy_s_now  = policy_s_next;
-      cycle_count   = RL::min(cycle_count++, std::numeric_limits<size_t>::max());
+      cycle_count   = RL::min(++cycle_count, std::numeric_limits<size_t>::max());
     }
 
     episode_count++;

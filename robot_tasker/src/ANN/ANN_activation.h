@@ -181,5 +181,157 @@ class Activation{
     }
 };
 
+
+class InitializerBase
+{
+  public:
+    virtual void initialize(const int n_nodes_prev_layer, 
+                            eig::Ref<eig::ArrayXf> weights, 
+                            eig::Ref<eig::ArrayXf> bias) const = 0;
+};
+
+class XavierUniform : public InitializerBase
+{
+  public:
+    void initialize(const int n_nodes_prev_layer, 
+                    eig::Ref<eig::ArrayXf> weights, 
+                    eig::Ref<eig::ArrayXf> bias) const override
+    {
+      const float bound = 1.0F/std::sqrtf((float)n_nodes_prev_layer);
+      std::random_device seed;
+      std::mt19937 rand_gen(seed());
+      std::uniform_real_distribution<float> param_dist(-bound, bound);
+      auto param_filler = [rand_gen, param_dist](float val){val = param_dist(rand_gen); param_dist(rand_gen); };
+
+      std::for_each(weights.begin(), weights.end(), param_filler);
+      std::for_each(bias.begin(), bias.end(), param_filler);
+    }
+};
+
+class HeUniform : public InitializerBase
+{
+  public:
+    void initializer(const int n_nodes_prev_layer, 
+                     eig::Ref<eig::ArrayXf> weights, 
+                     eig::Ref<eig::ArrayXf> bias) const override
+    {
+      const float bound = 2.0F/std::sqrtf((float)n_nodes_prev_layer);
+      std::random_device seed;
+      std::mt19937 rand_gen(seed());
+      std::uniform_real_distribution<float> param_dist(-bound, bound);
+      auto param_filler = [rand_gen, param_dist](float val){val = param_dist(rand_gen); param_dist(rand_gen); };
+
+      std::for_each(weights.begin(), weights.end(), param_filler);
+      std::for_each(bias.begin(), bias.end(), param_filler);
+    }
+};
+
+class ActivationBase
+{
+  public:
+  virtual ~ActivationBase(){}
+  virtual void activation(const eig::Ref<const eig::ArrayXf> wx_b, 
+                                eig::Ref<eig::ArrayXf> out) const = 0;
+
+  virtual void activation(const float wx_b, float& out) const = 0;
+
+  virtual void grad(const eig::Ref<const eig::ArrayXf> z, 
+                          eig::Ref<eig::ArrayXf> out) const = 0;
+};
+
+class NoActivation : public ActivationBase
+{
+  public:
+    ~NoActivation(){}
+    void activation(const eig::Ref<const eig::ArrayXf> wx_b, 
+                          eig::Ref<eig::ArrayXf> out) const override
+    {
+      out = wx_b;
+    }
+    
+    void activation(const float wx_b, float& out) const override;
+    {
+      out = wx_b;
+    }
+
+    void grad(const eig::Ref<const eig::ArrayXf> z, 
+                    eig::Ref<eig::ArrayXf> out) const override
+    {
+      out.fill(1.0F);
+    }
+};
+
+class Sigmoid : public ActivationBase
+{
+  public:
+    ~Sigmoid(){}
+    void activation(const eig::Ref<const eig::ArrayXf> wx_b, 
+                          eig::Ref<eig::ArrayXf> out) const override
+    {
+      out = 1.0F/(1.0F + eig::exp(-wx_b));
+    }
+    
+    void activation(const float wx_b, float& out) const override;
+    {
+      out = 1.0F/(1.0F + std::expf(-wx_b));
+    }
+
+    void grad(const eig::Ref<const eig::ArrayXf> z, 
+                    eig::Ref<eig::ArrayXf> out) const override
+    {
+      out = z*(1.0F - z);
+    }
+};
+
+class ReLU : public ActivationBase
+{
+  public:
+    ~ReLU(){}
+    void activation(const eig::Ref<const eig::ArrayXf> wx_b, 
+                          eig::Ref<eig::ArrayXf> out) const override
+    {
+      out = wx_b.unaryExpr([](float v){return v < 0.0F?0.0F:v; });
+    }
+    
+    void activation(const float wx_b, float& out) const override;
+    {
+      out = (wx_b < 0.0F)?0.0F:wx_b;
+    }
+
+    void grad(const eig::Ref<const eig::ArrayXf> z, 
+                    eig::Ref<eig::ArrayXf> out) const override
+    {
+      out = z.unaryExpr([](float v){return v < 0.0F?0.0F:1.0F;});
+    }
+};
+
+class LeakyReLU : public ActivationBase
+{
+  private:
+    float leakyness_factor_ = 0.5F;
+  public:
+    LeakyReLU() = default;
+    LeakyReLU(const float alpha): leakyness_factor_(alpha){}
+    ~LeakyReLU(){}
+    void activation(const eig::Ref<const eig::ArrayXf> wx_b, 
+                          eig::Ref<eig::ArrayXf> out) const override
+    {
+
+      out = wx_b.unaryExpr([this](float v){return v < 0.0F?this->leakyness_factor_*v:v; });
+    }
+    
+    void activation(const float wx_b, float& out) const override;
+    {
+      out = (wx_b < 0.0F)?this->leakyness_factor_*wx_b:wx_b;
+    }
+
+    void grad(const eig::Ref<const eig::ArrayXf> z, 
+                    eig::Ref<eig::ArrayXf> out) const override
+    {
+      out = z.unaryExpr([this](float v){return v < 0.0F?this->leakyness_factor_:1.0F;});
+    }
+};
+
+
 } // namespace {ANN}
 #endif
