@@ -60,67 +60,6 @@ read_global_config(const std::string& config_name)
   return retval;
 }
 
-// bool trajectory_intersects_barrier(const vector<RL::Polynomial<1>> world_map, 
-//                                    const RL::RobotState            robot_state)
-// {
-//   bool path_intersects_with_barrier = false;
-//   // size_t n_cycles = 5u;
-//   float dt        = 0.04F;
-//   eig::Matrix<float, 3, 1> Y; 
-//   eig::Matrix<float, 3, 3, eig::RowMajor> X;
-//   float y_ini = robot_state.position.y;
-//   float x_ini = 0.0F;
-//   for (size_t i = 0u; i < 3u; i++)
-//   {
-//     Y(i, 0) = y_ini + robot_state.velocity.y*dt;
-//     X(i, 0) = x_ini + robot_state.velocity.x*dt;
-
-//     X(i, 1) = X(i, 0)*X(i, 0);
-//     X(i, 2) = X(i, 1)*X(i, 0);
-
-//     y_ini = Y(i, 0);
-//     x_ini = X(i, 0);
-//   }
-//   eig::Matrix<float, 3, 3, eig::RowMajor> result = (X.inverse() * Y);
-//   RL::Polynomial<3> robot_path;
-//   robot_path.coeff[0] = robot_state.position.x;
-//   robot_path.coeff[1] = result(0, 0);
-//   robot_path.coeff[2] = result(1, 0);
-//   robot_path.coeff[3] = result(2, 0);
-//   robot_path.offset   = robot_state.position.x;
-
-//   float interval_x1 = robot_state.position.x;
-//   float interval_x2 = interval_x1 + X(last, 0);
-
-//   for (size_t barrier_iter = 0u; barrier_iter < world_map.size(); barrier_iter++)
-//   {
-//     const auto& cur_barrier_poly = world_map[barrier_iter];
-//     // use bolzano method to determine intersection
-//     if ((cur_barrier_poly.coeff.size() > 2u) || (cur_barrier_poly.coeff[1] < INF))
-//     {
-//       float h1 = poly_diff(cur_barrier_poly, world_map[barrier_iter], interval_x1);
-//       float h2 = poly_diff(cur_barrier_poly, world_map[barrier_iter], interval_x2);
-
-//       if (h1*h2 < 0.0F)
-//       {
-//         path_intersects_with_barrier = true;
-//         break;
-//       }
-//     }
-//     else if (cur_barrier_poly.coeff[1] > (INF-0.1F))
-//     {
-//       float h1 = eval_poly(cur_barrier_poly, cur_barrier_poly.bound_1.x);
-
-//       if (   ( (h1 > cur_barrier_poly.bound_1.y) && (h1 < cur_barrier_poly.bound_2.y) )
-//           || ( (h1 < cur_barrier_poly.bound_1.y) && (h1 > cur_barrier_poly.bound_2.y) ) )
-//       {
-//         path_intersects_with_barrier = true;
-//       }
-//     }
-//   }
-
-//   return path_intersects_with_barrier;
-// }
 
 void initiate_new_world(std::string_view file_to_save)
 {
@@ -202,11 +141,11 @@ void initiate_new_world(std::string_view file_to_save)
   )pyp", _p(file_to_save));
 }
 
-void realtime_visualizer_init(std::string_view world_file, int ring_buffer_len)
+void realtime_visualizer_init(std::string_view config, int ring_buffer_len)
 {
   Cppyplot::cppyplot pyp;
   pyp.raw(R"pyp(
-  global_params = open('/'.join(world_file.split('/')[:-1])+'/global_params.yaml', 'r')
+  global_params = open(config, 'r')
   params = yaml.load(global_params, Loader=yaml.SafeLoader)
   world_size_x = params['world']['size'][0]
   world_size_y = params['world']['size'][1]
@@ -215,7 +154,7 @@ void realtime_visualizer_init(std::string_view world_file, int ring_buffer_len)
   fig = plt.figure(figsize=(10, 5))
   world_axes    = plt.subplot2grid((3,3), (0,0), rowspan=3, colspan=2)
   action_axes   = plt.subplot2grid((3,3), (0,2), rowspan=2)
-  reward_axes   = plt.subplot2grid((3,3), (2,2), colspan=1)
+  Q_axes   = plt.subplot2grid((3,3), (2,2), colspan=1)
 
   world_axes.set(facecolor='#f2f4f4')
   world_axes.set_xlim(0, world_size_x)
@@ -230,16 +169,13 @@ void realtime_visualizer_init(std::string_view world_file, int ring_buffer_len)
   action_axes.tick_params(axis='y', labelsize=6)
   action_axes.grid(True)
 
-  reward_axes.set_xlim(0, ring_buffer_len)
-  reward_axes.set_ylim(-2000, 500)
-  reward_axes.set_xlabel("Cycle", fontsize=8)
-  reward_axes.set_ylabel("Reward", fontsize=8)
-  reward_axes.tick_params(axis='x', labelsize=6)
-  reward_axes.tick_params(axis='y', labelsize=6)
-  reward_axes.grid(True)
-
-  barrier_info = np.loadtxt(world_file, delimiter=',')
-  poly_line_seq = []
+  Q_axes.set_xlim(0, ring_buffer_len)
+  Q_axes.set_ylim(-20.0, 5.0)
+  Q_axes.set_xlabel("Cycle", fontsize=8)
+  Q_axes.set_ylabel("Reward", fontsize=8)
+  Q_axes.tick_params(axis='x', labelsize=6)
+  Q_axes.tick_params(axis='y', labelsize=6)
+  Q_axes.grid(True)
 
   fig.tight_layout()
 
@@ -248,16 +184,7 @@ void realtime_visualizer_init(std::string_view world_file, int ring_buffer_len)
   pose_y_buffer  = []
   action1_buffer = []
   action2_buffer = []
-  reward_buffer  = []
-
-  for i in range(0, barrier_info.shape[0]):
-    x_start  = barrier_info[i, 0]
-    x_end    = barrier_info[i, 2]
-    x        = np.linspace(x_start, x_end, 50)
-    poly_fit = np.poly1d(barrier_info[i, 4:])
-    y        = poly_fit(x)
-    line,    = world_axes.plot(x, y, 'k-', linewidth=2)
-    poly_line_seq.append(line)
+  Q_buffer  = []
 
   robot_pose_plot_obj, = world_axes.plot(0, 0, 'bx', markersize=8, alpha=0.8)
   target_pose_plot_obj, = world_axes.plot(0, 0, 'ro', markersize=12, alpha=0.9)
@@ -265,7 +192,7 @@ void realtime_visualizer_init(std::string_view world_file, int ring_buffer_len)
   action1_plot_obj,    = action_axes.plot([0], [0], 'ko--', linewidth=1, markersize=1, alpha=0.8, label="$a_0$")
   action2_plot_obj,    = action_axes.plot([0], [0], 'ro--', linewidth=1, markersize=1, alpha=0.8, label="$a_1$")
   action_axes.legend(loc="upper right")
-  reward_plot_obj,     = reward_axes.plot([0], [0], 'm-', linewidth=1)
+  Q_plot_obj,     = Q_axes.plot([0], [0], 'm-', linewidth=1)
 
   fig.canvas.draw()
   fig.canvas.flush_events()
@@ -275,9 +202,9 @@ void realtime_visualizer_init(std::string_view world_file, int ring_buffer_len)
   # cache axes background for blitting
   world_axes_bg  = fig.canvas.copy_from_bbox(world_axes.bbox)
   action_axes_bg = fig.canvas.copy_from_bbox(action_axes.bbox)
-  reward_axes_bg = fig.canvas.copy_from_bbox(reward_axes.bbox)
+  Q_axes_bg = fig.canvas.copy_from_bbox(Q_axes.bbox)
 
-  )pyp", _p(world_file), _p(ring_buffer_len));
+  )pyp", _p(config), _p(ring_buffer_len));
 }
 
 void update_target_pose(const array<float, 2>& target_pose)
@@ -288,7 +215,7 @@ void update_target_pose(const array<float, 2>& target_pose)
   
   fig.canvas.restore_region(world_axes_bg)
   fig.canvas.restore_region(action_axes_bg)
-  fig.canvas.restore_region(reward_axes_bg)
+  fig.canvas.restore_region(Q_axes_bg)
 
   world_axes.draw_artist(robot_pose_plot_obj)
   world_axes.draw_artist(target_pose_plot_obj)
@@ -297,19 +224,19 @@ void update_target_pose(const array<float, 2>& target_pose)
   action_axes.draw_artist(action1_plot_obj)
   action_axes.draw_artist(action2_plot_obj)
 
-  reward_axes.draw_artist(reward_plot_obj)
+  Q_axes.draw_artist(Q_plot_obj)
 
   fig.canvas.blit(world_axes.bbox)
   fig.canvas.blit(action_axes.bbox)
-  fig.canvas.blit(reward_axes.bbox)
+  fig.canvas.blit(Q_axes.bbox)
   fig.canvas.flush_events()
   )pyp", _p(target_pose));
 }
 
 void update_visualizer(const array<float, 2>& pose, 
                        const array<float, 2>& action, 
-                       const float            reward,
-                       int ring_buffer_len)
+                       const float            Q,
+                       const int ring_buffer_len)
 {
   Cppyplot::cppyplot pyp;
 
@@ -319,13 +246,13 @@ void update_visualizer(const array<float, 2>& pose,
     pose_y_buffer.append(0.0)
     action1_buffer.append(0.0)
     action2_buffer.append(0.0)
-    reward_buffer.append(0.0)
+    Q_buffer.append(0.0)
   
   pose_x_buffer[buffer_idx]  = pose[0]
   pose_y_buffer[buffer_idx]  = pose[1]
   action1_buffer[buffer_idx] = action[0]
   action2_buffer[buffer_idx] = action[1]
-  reward_buffer[buffer_idx]  = reward
+  Q_buffer[buffer_idx]  = Q
   buffer_idx                 = (buffer_idx+1)%ring_buffer_len
   idx_temp = np.arange(0, len(action1_buffer))
 
@@ -336,12 +263,12 @@ void update_visualizer(const array<float, 2>& pose,
                             action1_buffer[buffer_idx:] + action1_buffer[:buffer_idx])
   action2_plot_obj.set_data(idx_temp, 
                             action2_buffer[buffer_idx:] + action2_buffer[:buffer_idx])
-  reward_plot_obj.set_data(idx_temp, 
-                            reward_buffer[buffer_idx:] + reward_buffer[:buffer_idx])
+  Q_plot_obj.set_data(idx_temp, 
+                            Q_buffer[buffer_idx:] + Q_buffer[:buffer_idx])
   
   fig.canvas.restore_region(world_axes_bg)
   fig.canvas.restore_region(action_axes_bg)
-  fig.canvas.restore_region(reward_axes_bg)
+  fig.canvas.restore_region(Q_axes_bg)
 
   world_axes.draw_artist(robot_pose_plot_obj)
   world_axes.draw_artist(target_pose_plot_obj)
@@ -350,14 +277,14 @@ void update_visualizer(const array<float, 2>& pose,
   action_axes.draw_artist(action1_plot_obj)
   action_axes.draw_artist(action2_plot_obj)
 
-  reward_axes.draw_artist(reward_plot_obj)
+  Q_axes.draw_artist(Q_plot_obj)
 
   fig.canvas.blit(world_axes.bbox)
   fig.canvas.blit(action_axes.bbox)
-  fig.canvas.blit(reward_axes.bbox)
+  fig.canvas.blit(Q_axes.bbox)
   fig.canvas.flush_events()
 
-  )pyp", _p(pose), _p(action), _p(reward), _p(ring_buffer_len));
+  )pyp", _p(pose), _p(action), _p(Q), _p(ring_buffer_len));
 }
                        
 vector<RL::Polynomial<3>> read_world(const string& world_barrier, int load_old_file)
@@ -444,6 +371,68 @@ vector<RL::Polynomial<3>> read_world(const string& world_barrier, int load_old_f
   barriers.shrink_to_fit();
   return barriers;
 }
+
+// bool trajectory_intersects_barrier(const vector<RL::Polynomial<1>> world_map, 
+//                                    const RL::RobotState            robot_state)
+// {
+//   bool path_intersects_with_barrier = false;
+//   // size_t n_cycles = 5u;
+//   float dt        = 0.04F;
+//   eig::Matrix<float, 3, 1> Y; 
+//   eig::Matrix<float, 3, 3, eig::RowMajor> X;
+//   float y_ini = robot_state.position.y;
+//   float x_ini = 0.0F;
+//   for (size_t i = 0u; i < 3u; i++)
+//   {
+//     Y(i, 0) = y_ini + robot_state.velocity.y*dt;
+//     X(i, 0) = x_ini + robot_state.velocity.x*dt;
+
+//     X(i, 1) = X(i, 0)*X(i, 0);
+//     X(i, 2) = X(i, 1)*X(i, 0);
+
+//     y_ini = Y(i, 0);
+//     x_ini = X(i, 0);
+//   }
+//   eig::Matrix<float, 3, 3, eig::RowMajor> result = (X.inverse() * Y);
+//   RL::Polynomial<3> robot_path;
+//   robot_path.coeff[0] = robot_state.position.x;
+//   robot_path.coeff[1] = result(0, 0);
+//   robot_path.coeff[2] = result(1, 0);
+//   robot_path.coeff[3] = result(2, 0);
+//   robot_path.offset   = robot_state.position.x;
+
+//   float interval_x1 = robot_state.position.x;
+//   float interval_x2 = interval_x1 + X(last, 0);
+
+//   for (size_t barrier_iter = 0u; barrier_iter < world_map.size(); barrier_iter++)
+//   {
+//     const auto& cur_barrier_poly = world_map[barrier_iter];
+//     // use bolzano method to determine intersection
+//     if ((cur_barrier_poly.coeff.size() > 2u) || (cur_barrier_poly.coeff[1] < INF))
+//     {
+//       float h1 = poly_diff(cur_barrier_poly, world_map[barrier_iter], interval_x1);
+//       float h2 = poly_diff(cur_barrier_poly, world_map[barrier_iter], interval_x2);
+
+//       if (h1*h2 < 0.0F)
+//       {
+//         path_intersects_with_barrier = true;
+//         break;
+//       }
+//     }
+//     else if (cur_barrier_poly.coeff[1] > (INF-0.1F))
+//     {
+//       float h1 = eval_poly(cur_barrier_poly, cur_barrier_poly.bound_1.x);
+
+//       if (   ( (h1 > cur_barrier_poly.bound_1.y) && (h1 < cur_barrier_poly.bound_2.y) )
+//           || ( (h1 < cur_barrier_poly.bound_1.y) && (h1 > cur_barrier_poly.bound_2.y) ) )
+//       {
+//         path_intersects_with_barrier = true;
+//       }
+//     }
+//   }
+
+//   return path_intersects_with_barrier;
+// }
 
 
 } // namespace {ENV}

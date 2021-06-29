@@ -2,6 +2,7 @@
 
 #include "global_typedef.h"
 #include "learning/to_drive/to_drive.h"
+#include "learning/to_drive/to_drive_visualization.h"
 
 #include "util/environment_util.h"
 
@@ -13,10 +14,10 @@ using namespace ANN;
 
 int main()
 {
-  // auto world_barriers = ENV::read_world(WORLD_FILE);
   auto global_config  = ENV::read_global_config(CONFIG_FILE);
 
-  learn_to_drive(global_config);
+  auto [actor_network, critic_network] = learn_to_drive(global_config);
+  show_me_what_you_learned(actor_network, critic_network, CONFIG_FILE, 5u);
 
   // test_ann<100>();
 
