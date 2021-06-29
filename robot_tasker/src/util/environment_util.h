@@ -60,67 +60,67 @@ read_global_config(const std::string& config_name)
   return retval;
 }
 
-bool trajectory_intersects_barrier(const vector<RL::Polynomial<1>> world_map, 
-                                   const RL::RobotState            robot_state)
-{
-  bool path_intersects_with_barrier = false;
-  // size_t n_cycles = 5u;
-  float dt        = 0.04F;
-  RL::Array<float, 3> Y; 
-  RL::Matrix<float, 3, 3> X;
-  float y_ini = robot_state.position.y;
-  float x_ini = 0.0F;
-  for (size_t i = 0u; i < 3u; i++)
-  {
-    Y(i, 0) = y_ini + robot_state.velocity.y*dt;
-    X(i, 0) = x_ini + robot_state.velocity.x*dt;
+// bool trajectory_intersects_barrier(const vector<RL::Polynomial<1>> world_map, 
+//                                    const RL::RobotState            robot_state)
+// {
+//   bool path_intersects_with_barrier = false;
+//   // size_t n_cycles = 5u;
+//   float dt        = 0.04F;
+//   eig::Matrix<float, 3, 1> Y; 
+//   eig::Matrix<float, 3, 3, eig::RowMajor> X;
+//   float y_ini = robot_state.position.y;
+//   float x_ini = 0.0F;
+//   for (size_t i = 0u; i < 3u; i++)
+//   {
+//     Y(i, 0) = y_ini + robot_state.velocity.y*dt;
+//     X(i, 0) = x_ini + robot_state.velocity.x*dt;
 
-    X(i, 1) = X(i, 0)*X(i, 0);
-    X(i, 2) = X(i, 1)*X(i, 0);
+//     X(i, 1) = X(i, 0)*X(i, 0);
+//     X(i, 2) = X(i, 1)*X(i, 0);
 
-    y_ini = Y(i, 0);
-    x_ini = X(i, 0);
-  }
-  RL::MatrixX<float> result = (X.inverse() * Y);
-  RL::Polynomial<3> robot_path;
-  robot_path.coeff[0] = robot_state.position.x;
-  robot_path.coeff[1] = result(0, 0);
-  robot_path.coeff[2] = result(1, 0);
-  robot_path.coeff[3] = result(2, 0);
-  robot_path.offset   = robot_state.position.x;
+//     y_ini = Y(i, 0);
+//     x_ini = X(i, 0);
+//   }
+//   eig::Matrix<float, 3, 3, eig::RowMajor> result = (X.inverse() * Y);
+//   RL::Polynomial<3> robot_path;
+//   robot_path.coeff[0] = robot_state.position.x;
+//   robot_path.coeff[1] = result(0, 0);
+//   robot_path.coeff[2] = result(1, 0);
+//   robot_path.coeff[3] = result(2, 0);
+//   robot_path.offset   = robot_state.position.x;
 
-  float interval_x1 = robot_state.position.x;
-  float interval_x2 = interval_x1 + X(last, 0);
+//   float interval_x1 = robot_state.position.x;
+//   float interval_x2 = interval_x1 + X(last, 0);
 
-  for (size_t barrier_iter = 0u; barrier_iter < world_map.size(); barrier_iter++)
-  {
-    const auto& cur_barrier_poly = world_map[barrier_iter];
-    // use bolzano method to determine intersection
-    if ((cur_barrier_poly.coeff.size() > 2u) || (cur_barrier_poly.coeff[1] < INF))
-    {
-      float h1 = poly_diff(cur_barrier_poly, world_map[barrier_iter], interval_x1);
-      float h2 = poly_diff(cur_barrier_poly, world_map[barrier_iter], interval_x2);
+//   for (size_t barrier_iter = 0u; barrier_iter < world_map.size(); barrier_iter++)
+//   {
+//     const auto& cur_barrier_poly = world_map[barrier_iter];
+//     // use bolzano method to determine intersection
+//     if ((cur_barrier_poly.coeff.size() > 2u) || (cur_barrier_poly.coeff[1] < INF))
+//     {
+//       float h1 = poly_diff(cur_barrier_poly, world_map[barrier_iter], interval_x1);
+//       float h2 = poly_diff(cur_barrier_poly, world_map[barrier_iter], interval_x2);
 
-      if (h1*h2 < 0.0F)
-      {
-        path_intersects_with_barrier = true;
-        break;
-      }
-    }
-    else if (cur_barrier_poly.coeff[1] > (INF-0.1F))
-    {
-      float h1 = eval_poly(cur_barrier_poly, cur_barrier_poly.bound_1.x);
+//       if (h1*h2 < 0.0F)
+//       {
+//         path_intersects_with_barrier = true;
+//         break;
+//       }
+//     }
+//     else if (cur_barrier_poly.coeff[1] > (INF-0.1F))
+//     {
+//       float h1 = eval_poly(cur_barrier_poly, cur_barrier_poly.bound_1.x);
 
-      if (   ( (h1 > cur_barrier_poly.bound_1.y) && (h1 < cur_barrier_poly.bound_2.y) )
-          || ( (h1 < cur_barrier_poly.bound_1.y) && (h1 > cur_barrier_poly.bound_2.y) ) )
-      {
-        path_intersects_with_barrier = true;
-      }
-    }
-  }
+//       if (   ( (h1 > cur_barrier_poly.bound_1.y) && (h1 < cur_barrier_poly.bound_2.y) )
+//           || ( (h1 < cur_barrier_poly.bound_1.y) && (h1 > cur_barrier_poly.bound_2.y) ) )
+//       {
+//         path_intersects_with_barrier = true;
+//       }
+//     }
+//   }
 
-  return path_intersects_with_barrier;
-}
+//   return path_intersects_with_barrier;
+// }
 
 void initiate_new_world(std::string_view file_to_save)
 {

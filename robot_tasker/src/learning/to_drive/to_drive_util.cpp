@@ -1,12 +1,16 @@
 #include "to_drive_util.h"
 
-tuple<float, float> operator-(const RL::DifferentialRobotState& lhs, 
-                              const RL::DifferentialRobotState& rhs)
+tuple<float, float> operator-(const RL::DifferentialRobotState& actual, 
+                              const RL::DifferentialRobotState& reference)
 {
-  float range_error, heading_error;
-  range_error = std::sqrtf( RL::squaref(lhs.x - rhs.x) + RL::squaref(lhs.y - rhs.y) );
-  heading_error = RL::wrapto_minuspi_pi(lhs.psi - rhs.psi);
+  const float range_error = std::sqrtf( RL::squaref(actual.x - reference.x) 
+                                      + RL::squaref(actual.y - reference.y) );
 
+  const float heading_req = std::atan2f( (reference.y - actual.y), 
+                                         (reference.x - actual.x));
+
+  const float heading_error = RL::wrapto_minuspi_pi(actual.psi - heading_req);
+  
   return std::make_tuple(range_error, heading_error);
 }
 
@@ -30,12 +34,12 @@ init_new_episode(std::uniform_real_distribution<float>& state_x_sample,
   return ret_val;
 }
 
-void add_exploration_noise(std::normal_distribution<float>& exploration_noise_dist, 
-                           std::mt19937& rand_gen, 
-                           eig::Array<float, 1, 2, eig::RowMajor>& action)
+
+float get_exploration_noise(std::normal_distribution<float>& exploration_noise_dist, 
+                           std::mt19937& rand_gen)
 {
   const float exploration_noise = exploration_noise_dist(rand_gen);
-  action += exploration_noise;
+  return exploration_noise;
 }
 
 void state_normalize(const RL::GlobalConfig_t&               global_config, 

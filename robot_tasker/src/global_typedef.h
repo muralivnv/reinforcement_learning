@@ -35,6 +35,7 @@ using namespace std::chrono_literals;
 
 #define ITER(X) std::begin(X), std::end(X)
 #define TIME_NOW chrono::system_clock::now()
+#define TIME_DIFF(end_time, start_time) (std::chrono::duration<float>(end_time - start_time)).count()
 #define str2float(str, result) std::from_chars(str.data(), str.data()+str.length(), result)
 #define INF 100000.0F
 #define UNUSED(X) (void)(X)
@@ -45,20 +46,6 @@ using namespace std::chrono_literals;
 #define rad2deg(x) ((x)*57.2957795130823208F)
 
 namespace RL {
-template<typename T>
-using MatrixX = eig::Matrix<T, eig::Dynamic, eig::Dynamic, eig::RowMajor>; 
-
-template<typename T, int Rows, int Cols>
-using Matrix = eig::Matrix<T, Rows, Cols, eig::RowMajor>;
-
-template<typename T, int Rows>
-using Array = eig::Matrix<T, Rows, 1, eig::ColMajor>;
-
-template<int Rows>
-using Arrayf = eig::Matrix<float, Rows, 1, eig::ColMajor>;
-
-template<typename T>
-using VectorX = eig::Matrix<T, eig::Dynamic, 1, eig::ColMajor>;
 
 using GlobalConfig_t = std::unordered_map<std::string, float>;
 

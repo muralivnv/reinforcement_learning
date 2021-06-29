@@ -4,6 +4,7 @@
 #include <functional>
 #include <unordered_map>
 #include <any>
+#include <memory>
 
 #include "../global_typedef.h"
 #include "ANN_type_traits.h"

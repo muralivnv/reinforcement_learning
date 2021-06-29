@@ -15,6 +15,8 @@
 #include "robot_dynamics.h"
 #include "to_drive_util.h"
 
+#include "../../util/environment_util.h"
+
 using namespace ANN;
 using namespace RL;
 
@@ -24,18 +26,18 @@ static const TargetReachSuccessParams target_reach_params = TargetReachSuccessPa
 // reward calculation parameters
 // normalized range error reward calculation
 static const float normalized_range_error_reward_interp_x1 = 0.01F;
-static const float normalized_range_error_reward_interp_y1 = -1.0F;
+static const float normalized_range_error_reward_interp_y1 = -0.1F; // -1.0F
 static const float normalized_range_error_reward_interp_x2 = 0.80F;
-static const float normalized_range_error_reward_interp_y2 = -5.0F;
+static const float normalized_range_error_reward_interp_y2 = -2.0F; // -5.0F
 
 // normalized heading error reward calculation
 static const float normalized_heading_error_reward_interp_x1 = 0.01F;
-static const float normalized_heading_error_reward_interp_y1 = -1.0F;
+static const float normalized_heading_error_reward_interp_y1 = -0.1F; // -1.0F
 static const float normalized_heading_error_reward_interp_x2 = 0.80F;
-static const float normalized_heading_error_reward_interp_y2 = -6.0F;
+static const float normalized_heading_error_reward_interp_y2 = -4.0F; // -6.0F
 
 // reward discount factor
-static const float discount_factor = 1.0F;
+static const float discount_factor = 0.7F;
 
 // function definitions
 float calc_reward(eig::Array<float, 1, 2, eig::RowMajor>& normalized_policy_state)
@@ -98,25 +100,29 @@ void learn_to_drive(const RL::GlobalConfig_t& global_config)
 
   // parameter setup
   constexpr size_t batch_size                  = 256u;
-  constexpr size_t max_episodes                = 200u; 
-  constexpr size_t warm_up_cycles              = 4u*batch_size;
-  constexpr size_t replay_buffer_size          = 20u*batch_size;
-  constexpr float  critic_target_smoothing_factor = 0.999F;
-  constexpr float gradient_norm_threshold         = 0.5F;
+  const size_t max_episodes                = 200u; 
+  const size_t warm_up_cycles              = 4u*batch_size;
+  const size_t replay_buffer_size          = 20u*batch_size;
+  const float  critic_target_smoothing_factor = 0.999F;
+  const float gradient_norm_threshold         = 0.5F;
+  const size_t critic_target_update_rate      = 500u;
+  const float  actor_l2_reg_factor            = 1e-2F;
+  const float  critic_l2_reg_factor           = 1e-3F;
+
   // experience replay setup
   eig::Array<float, eig::Dynamic, BUFFER_LEN, eig::RowMajor> replay_buffer;
 
   // function approximation setup
   ArtificialNeuralNetwork<2, 8, 12, 20, 25, 2> actor;
   ArtificialNeuralNetwork<4, 10, 14, 21, 27, 1> critic, critic_target;
-  AdamOptimizer actor_opt((int)actor.weight.rows(), (int)actor.bias.rows(), 1e-5F);
-  AdamOptimizer critic_opt((int)critic.weight.rows(), (int)critic.bias.rows(), 1e-7F);
+  AdamOptimizer actor_opt((int)actor.weight.rows(), (int)actor.bias.rows(), 1e-4F);
+  AdamOptimizer critic_opt((int)critic.weight.rows(), (int)critic.bias.rows(), 1e-4F);
 
   actor.dense(Activation(RELU, HE_UNIFORM), 
               Activation(RELU, HE_UNIFORM),
               Activation(RELU, HE_UNIFORM),
               Activation(RELU, HE_UNIFORM),
-              Activation(RELU, HE_UNIFORM)
+              Activation(SIGMOID, HE_UNIFORM)
               );
   
   critic.dense(Activation(RELU, HE_UNIFORM), 
@@ -133,15 +139,31 @@ void learn_to_drive(const RL::GlobalConfig_t& global_config)
   // random state space sampler for initialization
   std::random_device seed;
   std::mt19937 rand_gen(seed());
-  std::uniform_real_distribution<float> state_x_sample(0, world_max_x);
-  std::uniform_real_distribution<float> state_y_sample(0, world_max_y);
+  std::uniform_real_distribution<float> state_x_sample(0.0F, world_max_x);
+  std::uniform_real_distribution<float> state_y_sample(0.0F, world_max_y);
   std::uniform_real_distribution<float> state_psi_sample(-PI, PI);
-  std::uniform_real_distribution<float> action1_sample(-action1_max, action1_max);
-  std::uniform_real_distribution<float> action2_sample(-action2_max, action2_max);
-  std::normal_distribution<float> action_exploration_dist(0.0F, 1.5F);
+  std::uniform_real_distribution<float> action1_sample(0.0F, action1_max);
+  std::uniform_real_distribution<float> action2_sample(0.0F, action2_max);
+  // std::normal_distribution<float> action_exploration_dist(0.0F, 6.5F);
 
   // counter setup
   size_t episode_count = 0u, cycle_count = 0u, replay_buffer_len = 0u;
+
+  // debug initialization --start
+  // visualizer specific variables
+  Cppyplot::cppyplot pyp;
+  bool vis_initialized  = false;
+  bool vis_episode_done = false;
+  RL::DifferentialRobotState vis_cur_state, vis_target_state, vis_next_state;
+  eig::Array<float, 1, 2, eig::RowMajor> vis_policy_s_now, vis_policy_action, vis_policy_s_next;
+  // float vis_Q;
+
+  // data recording for analysis 
+  bool record_data = false;
+  bool initialized_data_record = false;
+  size_t max_cycles_to_record = 2000;
+
+  // debug initialization --end
 
   while(episode_count < max_episodes)
   {
@@ -158,14 +180,22 @@ void learn_to_drive(const RL::GlobalConfig_t& global_config)
 
     while(NOT(episode_done))
     {
-      policy_action = forward_batch<1>(actor, policy_s_now);
-      add_exploration_noise(action_exploration_dist, rand_gen, policy_action);
+      // policy_action = forward_batch<1>(actor, policy_s_now);
+      // float exploration_noise = get_exploration_noise(action_exploration_dist, rand_gen);
+      // exploration_noise /= action1_max;
+      // policy_action += exploration_noise;
+      // policy_action(0, 0) = std::clamp(policy_action(0, 0), 0.0F, 1.0F);
+      // policy_action(0, 1) = std::clamp(policy_action(0, 1), 0.0F, 1.0F);
+      cur_state.x = state_x_sample(rand_gen);
+      cur_state.y = state_y_sample(rand_gen);
+      cur_state.psi = state_psi_sample(rand_gen);
 
-      // clamp policy_action values
-      policy_action(0, 0) = std::clamp(policy_action(0, 0), -action1_max, action1_max);
-      policy_action(0, 1) = std::clamp(policy_action(0, 1), -action2_max, action2_max);
+      tie(policy_s_now(0, 0), policy_s_now(0, 1)) = cur_state - target_state;
+      state_normalize(global_config, policy_s_now);
+      policy_action(0, 0) = action1_sample(rand_gen)/action1_max;
+      policy_action(0, 1) = action2_sample(rand_gen)/action2_max;
 
-      next_state  = differential_robot(cur_state, {policy_action(0, 0), policy_action(0, 1)}, global_config);
+      next_state  = differential_robot(cur_state, {policy_action(0, 0)*action1_max, policy_action(0, 1)*action2_max}, global_config);
       next_state.psi = RL::wrapto_minuspi_pi(next_state.psi);
 
       tie(policy_s_next(0, 0), policy_s_next(0, 1)) = next_state - target_state;
@@ -179,22 +209,58 @@ void learn_to_drive(const RL::GlobalConfig_t& global_config)
       replay_buffer_len %= replay_buffer_size;
       if (replay_buffer.rows() < ((int)replay_buffer_len+1u) )
       { replay_buffer.conservativeResize(replay_buffer_len+1u, NoChange); }
+
       replay_buffer(replay_buffer_len, {S0, S1})           = policy_s_now;
       replay_buffer(replay_buffer_len, {A0, A1})           = policy_action;
       replay_buffer(replay_buffer_len, R)                  = reward;
       replay_buffer(replay_buffer_len, {NEXT_S0, NEXT_S1}) = policy_s_next;
       replay_buffer(replay_buffer_len, EPISODE_STATE)      = (episode_done == true)?0.0F:1.0F;
       replay_buffer_len++;
-      
+
+      //debug code --start
+      if (record_data == true)
+      {
+        if (cycle_count < max_cycles_to_record)
+        {
+          if (initialized_data_record == false)
+          {
+            pyp.raw(R"pyp(
+            replay_buffer = [None]*max_cycles_to_record
+            buffer_idx = 0
+            )pyp", _p(max_cycles_to_record));
+            initialized_data_record = true;
+          }
+
+          const float s1 = policy_s_now(0, 0), s2 = policy_s_now(0, 1);
+          const float a1 = policy_action(0, 0), a2 = policy_action(0, 1);
+          const float s1_next = policy_s_next(0, 0), s2_next = policy_s_next(0, 1);
+          pyp.raw(R"pyp(
+          replay_buffer[buffer_idx] = [s1, s2, a1, a2, reward, s1_next, s2_next]
+          buffer_idx += 1
+          )pyp", _p(s1), _p(s2), _p(a1), _p(a2), _p(reward), _p(s1_next), _p(s2_next));
+        }
+        else
+        {
+          int temp_payload = 0;
+          pyp.raw(R"pyp(
+          np.save("X:/Video_Lectures/ReinforcementLearning/scripts/robot_tasker/scripts/analysis/replay_buffer.npy", np.array(replay_buffer))
+          plt.plot([], [])
+          plt.show()
+          )pyp", _p(temp_payload));
+          std::cout << "Saved replay buffer for further analysis\n";
+
+          record_data = false;
+        }
+      }
+      //debug code --end
+
       if (cycle_count >= warm_up_cycles)
       {
         // sample n measurements of length batch_size
         auto n_transitions = RL::get_n_shuffled_indices<batch_size>((int)replay_buffer.rows());
 
         eig::Array<float, batch_size, 4, eig::RowMajor> critic_next_input;
-        eig::Array<float, batch_size, 1>                Q_next;
-        eig::Array<float, batch_size, 1>                Q_now;
-        eig::Array<float, batch_size, 1>                td_error;
+        eig::Array<float, batch_size, 1>                Q_next, Q_now, td_error;
 
         // propagate next_state through actor network to calculate A_next = mu(S_next)
         critic_next_input(all, {S0, S1}) = replay_buffer(n_transitions, {NEXT_S0, NEXT_S1});
@@ -223,18 +289,16 @@ void learn_to_drive(const RL::GlobalConfig_t& global_config)
                                                                                               critic_loss_fcn,
                                                                                               critic_loss_grad);
 
-        // testing code --start !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        // gradient_clipping(gradient_norm_threshold, critic_weight_grad);
-        // gradient_clipping(gradient_norm_threshold, critic_bias_grad);
-        // gradient_clipping(gradient_norm_threshold, actor_weight_grad);
-        // gradient_clipping(gradient_norm_threshold, actor_bias_grad);
+        // Add L2 regularization for both actor and critic network
+        actor_weight_grad  += (actor_l2_reg_factor*actor.weight)/(float)batch_size;
+        critic_weight_grad += (critic_l2_reg_factor*critic.weight)/(float)batch_size;
 
+        //debug code --start
         float actor_weight_grad_norm  = std::sqrtf(actor_weight_grad.square().sum());
         float actor_bias_grad_norm    = std::sqrtf(actor_bias_grad.square().sum());
         float critic_weight_grad_norm = std::sqrtf(critic_weight_grad.square().sum());
         float critic_bias_grad_norm   = std::sqrtf(critic_bias_grad.square().sum());
-
-        // testing code --end !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        //debug code --end
 
         // update parameters of actor using optimizer
         actor_opt.step(actor_weight_grad, actor_bias_grad, actor.weight, actor.bias);
@@ -242,17 +306,78 @@ void learn_to_drive(const RL::GlobalConfig_t& global_config)
         // update parameters of critic using optimizer
         critic_opt.step(critic_weight_grad, critic_bias_grad, critic.weight, critic.bias);
 
-        // soft-update target network
-        soft_update_network(critic, critic_target_smoothing_factor, critic_target);
+        // hard-update critic target network
+        if ( (cycle_count % critic_target_update_rate) == 0u)
+        {
+          critic_target.weight = critic.weight;
+          critic_target.bias   = critic.bias;
+          std::cout << "C: " << cycle_count << " | updated critic target\n" << std::flush;
+        }
 
-        std::cout << "E: " << episode_count << " | C: " << cycle_count 
-                  << " | ALoss: " << actor_loss << " | CLoss: " << critic_loss 
-                  << " | A_wgNorm: " << actor_weight_grad_norm << " | A_bgNorm: " << actor_bias_grad_norm
-                  << " | C_wgNorm: " << critic_weight_grad_norm << " | C_bgNorm: " << critic_bias_grad_norm << '\n';
+        //debug code --start
+        if ( (cycle_count % 20) == 0)
+        {
+          std::cout << "E: " << episode_count << " | C: " << cycle_count
+                    << " | Ac: " << actor_loss << " | Cr: " << critic_loss 
+                    << " | Ac_WNrm: " << actor_weight_grad_norm << " | Ac_BNrm: " << actor_bias_grad_norm
+                    << " | Cr_WNrm: " << critic_weight_grad_norm << " | Cr_BNrm: " << critic_bias_grad_norm << '\n';
+          std::cout << std::flush;
+        }
+
+        if ( (cycle_count >= 2000) && ( (cycle_count % 20) == 0) )
+        {
+          std::cout << "C: " << cycle_count << " | Ac -> ";
+          display_layer_weights_norm(actor);
+          std::cout << std::flush;
+
+          std::cout << "C: " << cycle_count << " | Cr -> ";
+          display_layer_weights_norm(critic);
+          std::cout << std::flush;
+        }
       }
+      //debug code --end
+
       cur_state     = next_state;
       policy_s_now  = policy_s_next;
       cycle_count   = RL::min(++cycle_count, std::numeric_limits<size_t>::max());
+      
+      //debug code --start
+      // VISUALIZATION START
+      if ( (cycle_count >= 2000u) && ((cycle_count % 10) == 0u) )
+      {
+        if (NOT(vis_initialized))
+        {
+          ENV::realtime_visualizer_init("X:/Video_Lectures/ReinforcementLearning/scripts/robot_tasker/world_barriers.csv", 
+                                        10);
+          vis_initialized = true;
+          tie(vis_cur_state, vis_target_state) = init_new_episode(state_x_sample, state_y_sample, state_psi_sample, rand_gen);
+          ENV::update_target_pose({vis_target_state.x, vis_target_state.y});
+        }
+
+        if (vis_episode_done == true)
+        {
+          tie(vis_cur_state, vis_target_state) = init_new_episode(state_x_sample, state_y_sample, state_psi_sample, rand_gen);
+          ENV::update_target_pose({vis_target_state.x, vis_target_state.y});
+        }
+        
+        tie(vis_policy_s_now(0,0), vis_policy_s_now(0, 1)) = vis_cur_state - vis_target_state;
+        state_normalize(global_config, vis_policy_s_now);
+        
+        vis_policy_action = forward_batch<1>(actor, vis_policy_s_now);
+        
+        vis_next_state  = differential_robot(vis_cur_state, {vis_policy_action(0, 0)*action1_max, vis_policy_action(0, 1)*action2_max}, global_config);
+        vis_next_state.psi = RL::wrapto_minuspi_pi(vis_next_state.psi);
+        
+        vis_cur_state = vis_next_state;
+
+        vis_episode_done = is_robot_outside_world(vis_next_state, global_config);
+        vis_episode_done |= has_robot_reached_target(vis_next_state, vis_target_state, target_reach_params);
+
+        ENV::update_visualizer({vis_next_state.x, vis_next_state.y}, 
+                              {vis_policy_action(0,0)*action1_max, vis_policy_action(0,1)*action2_max}, 
+                              0.0F, 10);
+      }
+      //debug code --end
     }
 
     episode_count++;

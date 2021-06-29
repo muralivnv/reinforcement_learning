@@ -32,8 +32,8 @@ struct TargetReachSuccessParams{
   float min_req_heading_error_to_target;
 };
 
-tuple<float, float> operator-(const RL::DifferentialRobotState& lhs, 
-                              const RL::DifferentialRobotState& rhs);
+tuple<float, float> operator-(const RL::DifferentialRobotState& actual, 
+                              const RL::DifferentialRobotState& reference);
 
 tuple<RL::DifferentialRobotState, RL::DifferentialRobotState>
 init_new_episode(std::uniform_real_distribution<float>& state_x_sample, 
@@ -41,9 +41,8 @@ init_new_episode(std::uniform_real_distribution<float>& state_x_sample,
                  std::uniform_real_distribution<float>& state_psi_sample, 
                  std::mt19937& rand_gen);
 
-void add_exploration_noise(std::normal_distribution<float>& exploration_noise_dist, 
-                           std::mt19937& rand_gen, 
-                           eig::Array<float, 1, 2, eig::RowMajor>& action);
+float get_exploration_noise(std::normal_distribution<float>& exploration_noise_dist, 
+                           std::mt19937& rand_gen);
 
 void state_normalize(const RL::GlobalConfig_t&               global_config, 
                      eig::Array<float, 1, 2, eig::RowMajor>& policy_state);
@@ -129,8 +128,6 @@ auto actor_gradient_batch(const ANN::ArtificialNeuralNetwork<ActorInputSize, Act
   }
 
   // clamp actions
-  actor_activations.back()(all, 0)     = actor_activations.back()(all, 0).unaryExpr([action1_max](float a){return std::clamp(a, -action1_max, action1_max); });
-  actor_activations.back()(all, 1)     = actor_activations.back()(all, 1).unaryExpr([action2_max](float a){return std::clamp(a, -action2_max, action2_max); });
   critic_activations[0](all, {A0, A1}) = actor_activations.back();
 
   // calculate and store activations at each layer for critic_network

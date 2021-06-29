@@ -1,13 +1,10 @@
 #ifndef _ANN_H_
 #define _ANN_H_
 
-#include <functional>
-
 #include "../global_typedef.h"
 #include "ANN_type_traits.h"
 #include "ANN_typedef.h"
 #include "ANN_activation.h"
-
 namespace ANN
 {
 
@@ -99,7 +96,8 @@ auto forward_batch(const ArtificialNeuralNetwork<InputSize, NHiddenLayers...>& a
     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
     bias_count     += n_nodes_cur_layer;
   }
-  ANN::output_batch_t<BatchSize, NHiddenLayers...> output = prev_layer_activation;
+
+  ANN::output_batch_t<BatchSize, NHiddenLayers...> output = prev_layer_activation; 
   return output;
 }
 
