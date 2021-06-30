@@ -18,15 +18,16 @@ namespace ANN
 class ParamInitializerBase
 {
   public:
+    virtual ~ParamInitializerBase() {}
     virtual void initialize(const int n_nodes_prev_layer, 
-                            eig::Ref<eig::ArrayXf> weights) const = 0;
+                            eig::Ref<ArrayXf_t> weights) const = 0;
 };
 
 template<int SamplingDist=UNIFORM>
 class ParamSampler
 {
   public:
-    void fill (const float stddev, eig::Ref<eig::ArrayXf> weights) const
+    void fill (const float stddev, eig::Ref<ArrayXf_t> weights) const
     {
       if constexpr (SamplingDist == UNIFORM)
       {
@@ -41,23 +42,36 @@ class ParamSampler
     }
   private:
     void uniform_dist_(const float left_bound, const float right_bound, 
-                       eig::Ref<eig::ArrayXf> weights) const
+                       eig::Ref<ArrayXf_t> weights) const
     {
       std::random_device seed;
       std::mt19937 rand_gen(seed());
       std::uniform_real_distribution<float> param_dist(left_bound, right_bound);
-      auto param_filler = [&rand_gen, &param_dist](float val){val = param_dist(rand_gen); (void)param_dist(rand_gen); };
 
-      std::for_each(weights.begin(), weights.end(), param_filler);
+      for (int i = 0; i < weights.rows(); i++)
+      {
+        for (int j = 0; j < weights.cols(); j++)
+        {
+          weights(i, j) = param_dist(rand_gen);
+          (void)param_dist(rand_gen);
+        }
+      }
     }
     
-    void normal_dist_(const float stddev, eig::Ref<eig::ArrayXf> weights) const
+    void normal_dist_(const float stddev, eig::Ref<ArrayXf_t> weights) const
     {
       std::random_device seed;
       std::mt19937 rand_gen(seed());
       std::normal_distribution<float> param_dist(0.0F, stddev);
-      auto param_filler = [&rand_gen, &param_dist](float val){val = param_dist(rand_gen); (void)param_dist(rand_gen); };
-      std::for_each(weights.begin(), weights.end(), param_filler);
+
+      for (int i = 0; i < weights.rows(); i++)
+      {
+        for (int j = 0; j < weights.cols(); j++)
+        {
+          weights(i, j) = param_dist(rand_gen);
+          (void)param_dist(rand_gen);
+        }
+      }
     }
 };
 
@@ -65,7 +79,7 @@ template<int NormalizationType=L2_NORMALIZATION>
 class ParamNormalize 
 {
   public:
-    void normalize(eig::Ref<eig::ArrayXf> weights) const
+    void normalize(eig::Ref<ArrayXf_t> weights) const
     {
       if constexpr (NormalizationType == L2_NORMALIZATION)
       {
@@ -76,7 +90,7 @@ class ParamNormalize
     }
   
   private:
-    void l2_normalize_(eig::Ref<eig::ArrayXf> weights) const
+    void l2_normalize_(eig::Ref<ArrayXf_t> weights) const
     {
       const float l2_norm = std::sqrtf(weights.square().sum());
       weights /= l2_norm;
@@ -90,7 +104,7 @@ class Xavier : public ParamInitializerBase,
 {
   public:
     void initialize(const int n_nodes_prev_layer, 
-                    eig::Ref<eig::ArrayXf> weights) const override
+                    eig::Ref<ArrayXf_t> weights) const override
     {
       const float stddev = 1.0F/std::sqrtf((float)n_nodes_prev_layer);
       this->fill(stddev, weights);
@@ -105,7 +119,7 @@ class He : public ParamInitializerBase,
 {
   public:
     void initialize(const int n_nodes_prev_layer, 
-                    eig::Ref<eig::ArrayXf> weights) const override
+                    eig::Ref<ArrayXf_t> weights) const override
     {
       const float stddev = 2.0F/std::sqrtf((float)n_nodes_prev_layer);
       this->fill(stddev, weights);

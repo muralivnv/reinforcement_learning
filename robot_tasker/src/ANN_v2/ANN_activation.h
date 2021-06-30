@@ -9,8 +9,6 @@
 namespace ANN
 {
 
-using ArrayXf_t = eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>; 
-
 class ActivationBase
 {
   public:

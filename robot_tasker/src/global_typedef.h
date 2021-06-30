@@ -45,6 +45,10 @@ using namespace std::chrono_literals;
 #define deg2rad(x) ((x)*0.017453292519943F)
 #define rad2deg(x) ((x)*57.2957795130823208F)
 
+namespace ANN{
+using ArrayXf_t = eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>; 
+} // namespace {ANN}
+
 namespace RL {
 
 using GlobalConfig_t = std::unordered_map<std::string, float>;

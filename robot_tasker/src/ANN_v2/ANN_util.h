@@ -24,14 +24,14 @@ void set_layer_config(ArtificialNeuralNetwork<N>& ann,
 template<int N>
 void malloc_params(ArtificialNeuralNetwork<N>& ann)
 {
-  const size_t n_bias = std::accumulate(ann.n_nodes.begin()+1, ann.n_nodes.end(), 0);
+  const size_t n_bias = std::accumulate(ann.n_nodes.begin()+1u, ann.n_nodes.end(), (size_t)0u);
   
-  size_t n_weights = 0;
-  for (size_t i = 1u; i < N; i++)
+  size_t n_weights = 0u;
+  for (size_t i = 1u; i < (size_t)N; i++)
   { n_weights += (ann.n_nodes[i-1]*ann.n_nodes[i]); }
 
-  ann.weights.resize(n_weights, 1);
-  ann.bias.resize(n_bias, 1);
+  ann.weights.resize((int)n_weights, 1);
+  ann.bias.resize((int)n_bias, 1);
 }
 
 template<int N, typename ... T>
@@ -61,7 +61,7 @@ void initialize_params(ArtificialNeuralNetwork<N>& ann)
 {
   int total_weights = 0;
   int total_bias    = 0;
-  for (int layer = 1u; layer <= N; layer++)
+  for (int layer = 1u; layer < N; layer++)
   {
     int n_weights_this_layer = (int)(ann.n_nodes[layer-1u]*ann.n_nodes[layer]);
     int n_bias_this_layer    = (int)(ann.n_nodes[layer]);

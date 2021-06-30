@@ -34,7 +34,7 @@ gradient_batch(const ANN::ArtificialNeuralNetwork<N>&    ann,
 
   int weights_count = 0;
   int bias_count    = 0;
-  for (int layer = 1; layer <= N; layer++)
+  for (int layer = 1; layer < N; layer++)
   {
     int n_nodes_last_layer = (int)ann.n_nodes[layer-1];
     int n_nodes_cur_layer  = (int)ann.n_nodes[layer];
@@ -52,7 +52,7 @@ gradient_batch(const ANN::ArtificialNeuralNetwork<N>&    ann,
       auto w  = ann.weights(seq(this_node_weight_start, this_node_weight_end));
       auto wx = (activations[layer-1].matrix() * w.matrix());
       auto z = wx.array() + b(node);
-      ann.activations[layer-1]->activation(z, this_activation(all, node));
+      ann.activations[layer-1]->activation(z, this_activation.block(0, node, BatchSize, 1));
     }
     weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
     bias_count     += n_nodes_cur_layer;
@@ -72,12 +72,12 @@ gradient_batch(const ANN::ArtificialNeuralNetwork<N>&    ann,
 
   int next_layer_weights_end = 0, next_layer_weights_start = (int)ann.weights.rows();
   int next_layer_bias_end = 0, next_layer_bias_start = (int)ann.bias.rows();
-  for (int layer = N; layer != 0; layer--)
+  for (int layer = N-1; layer != 0; layer--)
   {
     n_nodes_this_layer              = (int)ann.n_nodes[layer];
     n_nodes_prev_layer              = (int)ann.n_nodes[layer-1];
     auto& prev_layer_activations    = activations[layer-1];
-    Activation_t this_layer_activation_grad;
+    Activation_t this_layer_activation_grad(BatchSize, n_nodes_this_layer);
     ann.activations[layer-1]->grad(activations[layer], this_layer_activation_grad);
 
     // calculate delta
@@ -86,7 +86,7 @@ gradient_batch(const ANN::ArtificialNeuralNetwork<N>&    ann,
       auto delta_before = delta_to_here(all, seq(0, prev_delta_n_cols-1));
       for (int node = 0; node < n_nodes_this_layer; node++)
       {
-        delta(all, node) = (delta_to_here.matrix()*ann.weights(seq(next_layer_weights_start+node, 
+        delta(all, node) = (delta_before.matrix()*ann.weights(seq(next_layer_weights_start+node, 
                                                                    next_layer_weights_end, 
                                                                    n_nodes_this_layer)).eval().matrix());
       }

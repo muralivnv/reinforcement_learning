@@ -11,7 +11,6 @@
 
 namespace ANN
 {
-
 using weights_t      = eig::Array<float, eig::Dynamic, 1>;
 using bias_t         = eig::Array<float, eig::Dynamic, 1>;
 using activation_t   = std::unique_ptr<ANN::ActivationBase>;

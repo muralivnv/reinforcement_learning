@@ -12,7 +12,7 @@ forward_batch(const ANN::ArtificialNeuralNetwork<N>& ann,
   const size_t largest_layer_len = *std::max_element(ann.n_nodes.begin(), ann.n_nodes.end());
 
   eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor> data_block1, data_block2;
-  int prev_layer_len = input.cols();
+  int prev_layer_len = (int)input.cols();
 
   data_block1.resize(BatchSize, largest_layer_len);
   data_block2.resize(BatchSize, largest_layer_len);
@@ -23,8 +23,8 @@ forward_batch(const ANN::ArtificialNeuralNetwork<N>& ann,
   int bias_count    = 0;
   for (int layer = 1u; layer <= N; layer++)
   {
-    int n_nodes_last_layer = (int)ann.n_nodes(layer-1u);
-    int n_nodes_cur_layer  = (int)ann.n_nodes(layer);
+    int n_nodes_last_layer = (int)ann.n_nodes[layer-1u];
+    int n_nodes_cur_layer  = (int)ann.n_nodes[layer];
     int weights_start      = weights_count;
     
     auto b = ann.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1));
@@ -36,10 +36,10 @@ forward_batch(const ANN::ArtificialNeuralNetwork<N>& ann,
       int this_node_weight_end   = weights_start+((node+1)*n_nodes_last_layer)-1;
       
       // calculate wX + b
-      auto w  = ann.weight(seq(this_node_weight_start, this_node_weight_end));
+      auto w  = ann.weights(seq(this_node_weight_start, this_node_weight_end));
       auto wx = prev_layer_activation.matrix() * w.matrix();
       auto z = wx.array() + b(node);
-      data_block2(all, node) = ann.activations[layer-1].activation_batch(z);
+      ann.activations[layer-1]->activation(z,  data_block2.block(0, node, BatchSize, 1));
     }
 
     // swap data blocks
