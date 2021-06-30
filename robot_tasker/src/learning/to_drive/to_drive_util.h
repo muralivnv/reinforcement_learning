@@ -1,19 +1,14 @@
 #ifndef _TO_DRIVE_UTIL_H_
 #define _TO_DRIVE_UTIL_H_
 
-#include <Eigen/Core>
-#include <limits>
-#include <random>
 #include <cmath>
 
 #include "../../global_typedef.h"
 
 #include "../../ANN/ANN_activation.h"
 #include "../../ANN/ANN.h"
-#include "../../ANN/ANN_optimizers.h"
 
 #include "../../util/util.h"
-#include "robot_dynamics.h"
 
 enum ReplayBufferIndices{
   S0 = 0,

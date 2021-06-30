@@ -25,15 +25,15 @@ static const TargetReachSuccessParams target_reach_params = TargetReachSuccessPa
 // reward calculation parameters
 // normalized range error reward calculation
 static const float normalized_range_error_reward_interp_x1 = 0.01F;
-static const float normalized_range_error_reward_interp_y1 = -0.1F; // -1.0F
+static const float normalized_range_error_reward_interp_y1 = -0.1F;
 static const float normalized_range_error_reward_interp_x2 = 0.80F;
-static const float normalized_range_error_reward_interp_y2 = -2.0F; // -5.0F
+static const float normalized_range_error_reward_interp_y2 = -2.0F;
 
 // normalized heading error reward calculation
 static const float normalized_heading_error_reward_interp_x1 = 0.01F;
-static const float normalized_heading_error_reward_interp_y1 = -0.1F; // -1.0F
+static const float normalized_heading_error_reward_interp_y1 = -0.1F;
 static const float normalized_heading_error_reward_interp_x2 = 0.80F;
-static const float normalized_heading_error_reward_interp_y2 = -4.0F; // -6.0F
+static const float normalized_heading_error_reward_interp_y2 = -4.0F;
 
 // reward discount factor
 static const float discount_factor = 0.7F;
@@ -301,7 +301,7 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config, const bool logging_
         if (terminate_critic_optim == true)
         {
           actor_optim_termination_counter++;
-          if (actor_optim_termination_counter >= 500u)
+          if (actor_optim_termination_counter >= (2u*batch_size) )
           {
             terminate_actor_optim = true;
             break;
