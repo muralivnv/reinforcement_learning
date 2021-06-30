@@ -8,3 +8,5 @@
 !/robot_tasker/cmake/*.template
 
 /robot_tasker/build/*
+/robot_tasker/papers/*
+/robot_tasker/libs/*

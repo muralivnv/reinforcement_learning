@@ -1,4 +1,5 @@
 #include "util.h"
+#include <filesystem>
 
 namespace util
 {
@@ -37,6 +38,12 @@ float wrapto_minuspi_pi(float angle) noexcept
 float squaref(float x) noexcept
 {
   return x*x;
+}
+
+std::string get_file_dir_path(const std::string& filename)
+{
+  std::filesystem::path file(filename);
+  return file.parent_path().string();
 }
 
 } //namespace {util}

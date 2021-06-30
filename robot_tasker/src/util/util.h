@@ -47,6 +47,9 @@ std::array<int, N> get_n_shuffled_indices(const int container_size)
   return shuffled_n_indices;
 }
 
+
+std::string get_file_dir_path(const std::string& filename);
+
 } // namespace {util}
 
 #endif
