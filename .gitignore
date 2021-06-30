@@ -1,5 +1,10 @@
 /.vscode/c_cpp_properties.json
 /.vscode/launch.json
-/robot_tasker/.gitignore
-/robot_tasker/.vscode/c_cpp_properties.json
-*/.vscode/*
+
+/robot_tasker/.vscode/*
+/robot_tasker/robot_tasker.md
+/robot_tasker/cmake/*
+
+!/robot_tasker/cmake/*.template
+
+/robot_tasker/build/*

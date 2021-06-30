@@ -1,0 +1,13 @@
+add_library(EIGEN INTERFACE)
+target_include_directories(EIGEN INTERFACE <path-to-eigen-includes>)
+
+add_library(YAML_CPP INTERFACE)
+target_include_directories(YAML_CPP INTERFACE <path-to-yaml-include>)
+target_link_libraries(YAML_CPP INTERFACE debug <path-to-yaml-debug-lib>)
+target_link_libraries(YAML_CPP INTERFACE optimized <path-to-yaml-release-lib>)
+
+# cppyplot library and setup process can be found at https://github.com/muralivnv/cpp-pyplot
+add_library(CPPYPLOT INTERFACE)
+target_include_directories(CPPYPLOT INTERFACE <path-to-cppyplot-include>)
+target_link_libraries(CPPYPLOT INTERFACE debug <path-to-zmq-debug-lib>)
+target_link_libraries(CPPYPLOT INTERFACE optimized <path-to-zmq-release-lib>)
