@@ -12,18 +12,22 @@ set(RELEASE_COMPILER_OPTIONS /W4 /w14640 /EHsc /openmp /O2 /fp:precise /F2048 /a
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/external_libs.cmake)
 
-add_executable(${PROJECT_NAME} src/robot_tasker.cpp 
-                               src/learning/to_drive/to_drive_util.cpp
-                               src/learning/to_drive/robot_dynamics.cpp
-                               src/util/util.cpp)
+add_library(util src/util/util.cpp)
+target_link_libraries(util EIGEN YAML_CPP)
+
+add_library(to_drive src/learning/to_drive/to_drive_util.cpp
+                     src/learning/to_drive/robot_dynamics.cpp)
+target_link_libraries(to_drive EIGEN YAML_CPP)
+
+add_executable(${PROJECT_NAME} src/robot_tasker.cpp)
 
 target_compile_options(${PROJECT_NAME} PRIVATE "$<$<CONFIG:DEBUG>:${DEBUG_COMPILER_OPTIONS}>")
 target_compile_options(${PROJECT_NAME} PRIVATE "$<$<CONFIG:RELEASE>:${RELEASE_COMPILER_OPTIONS}>")
 
 target_link_libraries(${PROJECT_NAME} 
-                      EIGEN
-                      YAML_CPP
-                      CPPYPLOT)
+                      CPPYPLOT
+                      util
+                      to_drive)
 
 # copy runtime dll's
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
