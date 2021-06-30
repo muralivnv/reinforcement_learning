@@ -2,18 +2,16 @@
 #define _ROBOT_DYNAMICS_H_
 
 #include "../../global_typedef.h"
+#include "robot_typedef.h"
 
-namespace RL
+namespace learning::to_drive
 {
+using namespace global_typedef;
 
-DifferentialRobotState differential_robot(const RL::DifferentialRobotState& cur_state, 
-                                              const RL::Action2D&               cmd_vel, 
-                                              const RL::GlobalConfig_t&         global_config);
+DifferentialRobotState differential_robot(const DifferentialRobotState& cur_state, 
+                                          const WheelSpeeds&            cmd_vel, 
+                                          const GlobalConfig_t&         global_config);
 
-DifferentialRobotState 
-robot_state_diff(const RL::DifferentialRobotState& lhs, 
-                 const RL::DifferentialRobotState& rhs);
-
-} // namespace {RL}
+} // namespace {learning::to_drive}
 
 #endif

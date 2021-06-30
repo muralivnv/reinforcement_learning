@@ -4,7 +4,6 @@
 #include <filesystem> 
 #include <fstream>
 #include <unordered_map>
-#include <chrono>
 
 #include "../global_typedef.h"
 #include "util.h"
@@ -12,33 +11,8 @@
 
 namespace filesystem = std::filesystem;
 
-namespace ENV
+namespace env_util
 {
-
-template<size_t N>
-float eval_poly(RL::Polynomial<N> polynomial, float value)
-{
-  float result = polynomial.coeff[0];
-  float x      = value;
-  for (size_t i = 1u; i < (N+1); i++)
-  {
-    result += (x*polynomial.coeff[i]);
-    x *= x;
-  }
-  return result;
-}
-
-template<size_t M, size_t N>
-float poly_diff(RL::Polynomial<M> poly1, RL::Polynomial<N> poly2, float value)
-{
-  float min_x = RL::min(poly1.bound_1.x, poly1.bound_2.x, poly2.bound_1.x, poly2.bound_2.x);
-  float max_x = RL::max(poly1.bound_1.x, poly1.bound_2.x, poly2.bound_1.x, poly2.bound_2.x);
-
-  value = std::clamp(value, min_x, max_x);
-
-  return (eval_poly(poly1, value) - eval_poly(poly2, value));
-}
-
 
 std::unordered_map<std::string, float>
 read_global_config(const std::string& config_name)
@@ -59,7 +33,6 @@ read_global_config(const std::string& config_name)
   
   return retval;
 }
-
 
 void initiate_new_world(std::string_view file_to_save)
 {
@@ -286,155 +259,7 @@ void update_visualizer(const array<float, 2>& pose,
 
   )pyp", _p(pose), _p(action), _p(Q), _p(ring_buffer_len));
 }
-                       
-vector<RL::Polynomial<3>> read_world(const string& world_barrier, int load_old_file)
-{
-  if (filesystem::exists(world_barrier) && (load_old_file == 0))
-  {
-    std::cout << "World map file, \n\t"<< world_barrier << " \nexist. \n Load this file? [1/0]: ";
-    std::cin >> load_old_file; 
-  }
-  
-  if (load_old_file == 0)
-  {  
-    initiate_new_world(world_barrier);
 
-    if (filesystem::exists(world_barrier))
-    { std::system( ("del " + world_barrier).c_str() ); }
-    
-    while (!filesystem::exists(world_barrier))
-    {  std::this_thread::sleep_for(500ms);  }
-
-    std::this_thread::sleep_for(500ms);
-  }
-  
-  vector<RL::Polynomial<3>> barriers;
-  barriers.reserve(10);
-  std::ifstream in_file(world_barrier);
-  if (in_file.is_open())
-  {
-    std::stringstream file_buf;
-    file_buf << in_file.rdbuf();
-    string line;
-    
-    // read and skip first line (header)
-    std::getline(file_buf, line);
-    while(std::getline(file_buf, line))
-    {
-      if (!line.empty())
-      {
-        string data;
-        float x_left, y_left, x_right, y_right;
-        float c3, c2, c1, c0;
-        std::stringstream line_buf (line);
-        
-        std::getline(line_buf, data, ',');
-        str2float(data, x_left);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, y_left);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, x_right);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, y_right);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, c3);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, c2);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, c1);
-
-        std::getline(line_buf, data, ',');
-        str2float(data, c0);
-
-        barriers.push_back(RL::Polynomial<3>());
-        auto& this_poly = barriers.back();
-        this_poly.coeff[0]  = c0;
-        this_poly.coeff[1]  = c1;
-        this_poly.coeff[2]  = c2;
-        this_poly.coeff[3]  = c3;
-        this_poly.offset    = 0.0F;
-        this_poly.bound_1.x = x_left;
-        this_poly.bound_1.y = y_left;
-        this_poly.bound_2.x = x_right;
-        this_poly.bound_2.y = y_right;
-      }
-    }
-  }
-  in_file.close();
-
-  barriers.shrink_to_fit();
-  return barriers;
-}
-
-// bool trajectory_intersects_barrier(const vector<RL::Polynomial<1>> world_map, 
-//                                    const RL::RobotState            robot_state)
-// {
-//   bool path_intersects_with_barrier = false;
-//   // size_t n_cycles = 5u;
-//   float dt        = 0.04F;
-//   eig::Matrix<float, 3, 1> Y; 
-//   eig::Matrix<float, 3, 3, eig::RowMajor> X;
-//   float y_ini = robot_state.position.y;
-//   float x_ini = 0.0F;
-//   for (size_t i = 0u; i < 3u; i++)
-//   {
-//     Y(i, 0) = y_ini + robot_state.velocity.y*dt;
-//     X(i, 0) = x_ini + robot_state.velocity.x*dt;
-
-//     X(i, 1) = X(i, 0)*X(i, 0);
-//     X(i, 2) = X(i, 1)*X(i, 0);
-
-//     y_ini = Y(i, 0);
-//     x_ini = X(i, 0);
-//   }
-//   eig::Matrix<float, 3, 3, eig::RowMajor> result = (X.inverse() * Y);
-//   RL::Polynomial<3> robot_path;
-//   robot_path.coeff[0] = robot_state.position.x;
-//   robot_path.coeff[1] = result(0, 0);
-//   robot_path.coeff[2] = result(1, 0);
-//   robot_path.coeff[3] = result(2, 0);
-//   robot_path.offset   = robot_state.position.x;
-
-//   float interval_x1 = robot_state.position.x;
-//   float interval_x2 = interval_x1 + X(last, 0);
-
-//   for (size_t barrier_iter = 0u; barrier_iter < world_map.size(); barrier_iter++)
-//   {
-//     const auto& cur_barrier_poly = world_map[barrier_iter];
-//     // use bolzano method to determine intersection
-//     if ((cur_barrier_poly.coeff.size() > 2u) || (cur_barrier_poly.coeff[1] < INF))
-//     {
-//       float h1 = poly_diff(cur_barrier_poly, world_map[barrier_iter], interval_x1);
-//       float h2 = poly_diff(cur_barrier_poly, world_map[barrier_iter], interval_x2);
-
-//       if (h1*h2 < 0.0F)
-//       {
-//         path_intersects_with_barrier = true;
-//         break;
-//       }
-//     }
-//     else if (cur_barrier_poly.coeff[1] > (INF-0.1F))
-//     {
-//       float h1 = eval_poly(cur_barrier_poly, cur_barrier_poly.bound_1.x);
-
-//       if (   ( (h1 > cur_barrier_poly.bound_1.y) && (h1 < cur_barrier_poly.bound_2.y) )
-//           || ( (h1 < cur_barrier_poly.bound_1.y) && (h1 > cur_barrier_poly.bound_2.y) ) )
-//       {
-//         path_intersects_with_barrier = true;
-//       }
-//     }
-//   }
-
-//   return path_intersects_with_barrier;
-// }
-
-
-} // namespace {ENV}
+} // namespace {env_util}
 
 #endif

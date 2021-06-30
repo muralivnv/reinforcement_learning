@@ -1,25 +1,17 @@
 #ifndef _TO_DRIVE_VISUALIZATION_H_
 #define _TO_DRIVE_VISUALIZATION_H_
 
-#include <random>
-#include <chrono>
 #include <thread>
 
 #include "../../global_typedef.h"
-
-#include "../../ANN/ANN_activation.h"
 #include "../../ANN/ANN.h"
-#include "../../ANN/ANN_optimizers.h"
-#include "../../ANN/ANN_util.h"
-
-#include "../../util/util.h"
 
 #include "robot_dynamics.h"
 #include "to_drive_util.h"
-
 #include "../../util/environment_util.h"
 
-using namespace std::chrono_literals;
+namespace learning::to_drive
+{
 
 template<typename ActorNetwork_t, typename CriticNetwork_t>
 void show_me_what_you_learned(const ActorNetwork_t& actor, 
@@ -27,7 +19,7 @@ void show_me_what_you_learned(const ActorNetwork_t& actor,
                               const std::string& config_file, 
                               const size_t           max_episodes)
 {
-  auto global_config  = ENV::read_global_config(config_file);
+  auto global_config  = env_util::read_global_config(config_file);
   static const float& world_max_x = global_config.at("world/size/x"); 
   static const float& world_max_y = global_config.at("world/size/y"); 
   static const float& action1_max = global_config.at("robot/max_wheel_speed");
@@ -46,18 +38,18 @@ void show_me_what_you_learned(const ActorNetwork_t& actor,
 
   size_t episode_count = 0u;
 
-  ENV::realtime_visualizer_init(config_file, 10u);
+  env_util::realtime_visualizer_init(config_file, 10u);
   while(episode_count <= max_episodes)
   {
     episode_count++;
 
     bool is_episode_done = false;
-    RL::DifferentialRobotState cur_state, target_state, next_state;
+    DifferentialRobotState cur_state, target_state, next_state;
     eig::Array<float, 1, 2, eig::RowMajor> policy_s_now, policy_action, policy_s_next;
     eig::Array<float, 1, 4, eig::RowMajor> critic_input;
 
     tie(cur_state, target_state) = init_new_episode(state_x_sample, state_y_sample, state_psi_sample, rand_gen);
-    ENV::update_target_pose({target_state.x, target_state.y});
+    env_util::update_target_pose({target_state.x, target_state.y});
 
     while (NOT(is_episode_done))
     {
@@ -66,7 +58,7 @@ void show_me_what_you_learned(const ActorNetwork_t& actor,
       
       policy_action = forward_batch<1>(actor, policy_s_now);
       next_state  = differential_robot(cur_state, {policy_action(0, 0)*action1_max, policy_action(0, 1)*action2_max}, global_config);
-      next_state.psi = RL::wrapto_minuspi_pi(next_state.psi);
+      next_state.psi = util::wrapto_minuspi_pi(next_state.psi);
       
       critic_input(0, S0) = policy_s_now(0, 0);
       critic_input(0, S1) = policy_s_now(0, 1);
@@ -82,7 +74,7 @@ void show_me_what_you_learned(const ActorNetwork_t& actor,
       auto [pose_error, heading_error] = next_state - target_state;
       std::cout << "episode: " << episode_count << ", pose_error: " << pose_error << ", heading_error: " << heading_error << '\n';
 
-      ENV::update_visualizer({next_state.x, next_state.y}, 
+      env_util::update_visualizer({next_state.x, next_state.y}, 
                             {policy_action(0,0)*action1_max, policy_action(0,1)*action2_max}, 
                             Q(0, 0), 10);
       
@@ -90,4 +82,7 @@ void show_me_what_you_learned(const ActorNetwork_t& actor,
     }
   }
 }
+
+} // namespace {learning::to_drive}
+
 #endif

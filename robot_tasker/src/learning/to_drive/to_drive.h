@@ -1,3 +1,7 @@
+#ifndef _TO_DRIVE_H_
+#define _TO_DRIVE_H_
+
+#include <iostream>
 #include <limits>
 #include <random>
 #include <cmath>
@@ -14,10 +18,10 @@
 #include "robot_dynamics.h"
 #include "to_drive_util.h"
 
-#include "../../util/environment_util.h"
-
 using namespace ANN;
-using namespace RL;
+
+namespace learning::to_drive
+{
 
 // local parameters
 static const TargetReachSuccessParams target_reach_params = TargetReachSuccessParams{1.0F, deg2rad(5.0F)};
@@ -42,11 +46,11 @@ static const float discount_factor = 0.7F;
 float calc_reward(eig::Array<float, 1, 2, eig::RowMajor>& normalized_policy_state)
 {
   // calculate reward for position error
-  float reward = RL::linear_interpolate(normalized_policy_state(0, 0), 
+  float reward = util::linear_interpolate(normalized_policy_state(0, 0), 
                                         normalized_range_error_reward_interp_x1,  normalized_range_error_reward_interp_y1,
                                         normalized_range_error_reward_interp_x2,  normalized_range_error_reward_interp_y2);
   // calculate reward for heading error
-  reward += RL::linear_interpolate(fabsf(normalized_policy_state(0, 1)),   
+  reward += util::linear_interpolate(fabsf(normalized_policy_state(0, 1)),   
                                    normalized_heading_error_reward_interp_x1,  normalized_heading_error_reward_interp_y1,
                                    normalized_heading_error_reward_interp_x2,  normalized_heading_error_reward_interp_y2);
 
@@ -90,7 +94,7 @@ critic_loss_grad(const eig::Array<float, eig::Dynamic, 1>& Q,
 }
 
 
-auto learn_to_drive(const RL::GlobalConfig_t& global_config, const bool logging_enabled = true)
+auto learn_to_drive(const learning::to_drive::GlobalConfig_t& global_config, const bool logging_enabled = true)
 {
   static const float& world_max_x = global_config.at("world/size/x"); 
   static const float& world_max_y = global_config.at("world/size/y"); 
@@ -155,7 +159,7 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config, const bool logging_
         && (   (terminate_actor_optim == false ) 
             || (terminate_critic_optim == false)) )
   {
-    RL::DifferentialRobotState cur_state, next_state, target_state;
+    DifferentialRobotState cur_state, next_state, target_state;
     eig::Array<float, 1, 2, eig::RowMajor> policy_s_now, policy_action, policy_s_next;
     float reward;
     bool episode_done = false;
@@ -179,7 +183,7 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config, const bool logging_
 
       // perturb system with sample state and actions to observe next state and reward
       next_state  = differential_robot(cur_state, {policy_action(0, 0)*action1_max, policy_action(0, 1)*action2_max}, global_config);
-      next_state.psi = RL::wrapto_minuspi_pi(next_state.psi);
+      next_state.psi = util::wrapto_minuspi_pi(next_state.psi);
 
       tie(policy_s_next(0, 0), policy_s_next(0, 1)) = next_state - target_state;
       state_normalize(global_config, policy_s_next);
@@ -204,7 +208,7 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config, const bool logging_
       if (cycle_count >= warm_up_cycles)
       {
         // sample n measurements of length batch_size
-        auto n_transitions = RL::get_n_shuffled_indices<batch_size>((int)replay_buffer.rows());
+        auto n_transitions = util::get_n_shuffled_indices<batch_size>((int)replay_buffer.rows());
         const float actor_loss_prev = actor_loss_avg;
         const float critic_loss_prev = critic_loss_avg;
 
@@ -308,7 +312,7 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config, const bool logging_
           }
         }
       }
-      cycle_count   = RL::min(++cycle_count, std::numeric_limits<size_t>::max());
+      cycle_count   = util::min(++cycle_count, std::numeric_limits<size_t>::max());
     }
 
     episode_count++;
@@ -317,3 +321,7 @@ auto learn_to_drive(const RL::GlobalConfig_t& global_config, const bool logging_
   std::cout << "I know how to Drive!\n";
   return std::make_tuple(actor, critic);
 }
+
+} // namespace {learning::to_drive}
+
+#endif

@@ -1,6 +1,6 @@
 #include "util.h"
 
-namespace RL
+namespace util
 {
 
 float linear_interpolate(const float x, 
@@ -39,4 +39,4 @@ float squaref(float x) noexcept
   return x*x;
 }
 
-} //namespace {RL}
+} //namespace {util}

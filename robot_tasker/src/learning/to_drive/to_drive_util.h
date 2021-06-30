@@ -4,33 +4,21 @@
 #include <cmath>
 
 #include "../../global_typedef.h"
-
 #include "../../ANN/ANN_activation.h"
 #include "../../ANN/ANN.h"
 
-#include "../../util/util.h"
+#include "robot_typedef.h"
+#include "to_drive_typedef.h"
 
-enum ReplayBufferIndices{
-  S0 = 0,
-  S1, 
-  A0, 
-  A1, 
-  R, 
-  NEXT_S0, 
-  NEXT_S1,
-  EPISODE_STATE,
-  BUFFER_LEN,
-};
+namespace learning::to_drive
+{
 
-struct TargetReachSuccessParams{
-  float min_req_range_error_to_target;
-  float min_req_heading_error_to_target;
-};
+using namespace global_typedef;
 
-tuple<float, float> operator-(const RL::DifferentialRobotState& actual, 
-                              const RL::DifferentialRobotState& reference);
+tuple<float, float> operator-(const DifferentialRobotState& actual, 
+                              const DifferentialRobotState& reference);
 
-tuple<RL::DifferentialRobotState, RL::DifferentialRobotState>
+tuple<DifferentialRobotState, DifferentialRobotState>
 init_new_episode(std::uniform_real_distribution<float>& state_x_sample, 
                  std::uniform_real_distribution<float>& state_y_sample, 
                  std::uniform_real_distribution<float>& state_psi_sample, 
@@ -39,14 +27,14 @@ init_new_episode(std::uniform_real_distribution<float>& state_x_sample,
 float get_exploration_noise(std::normal_distribution<float>& exploration_noise_dist, 
                            std::mt19937& rand_gen);
 
-void state_normalize(const RL::GlobalConfig_t&               global_config, 
+void state_normalize(const GlobalConfig_t&               global_config, 
                      eig::Array<float, 1, 2, eig::RowMajor>& policy_state);
 
-bool is_robot_outside_world(const RL::DifferentialRobotState& state,
-                            const RL::GlobalConfig_t&         global_config);
+bool is_robot_outside_world(const DifferentialRobotState& state,
+                            const GlobalConfig_t&         global_config);
 
-bool has_robot_reached_target(const RL::DifferentialRobotState& current_state, 
-                              const RL::DifferentialRobotState& target_state, 
+bool has_robot_reached_target(const DifferentialRobotState& current_state, 
+                              const DifferentialRobotState& target_state, 
                               const TargetReachSuccessParams&   target_reached_criteria);
 
 template<int InputSize, int ... NHiddenLayers>
@@ -71,7 +59,7 @@ auto actor_gradient_batch(const ANN::ArtificialNeuralNetwork<ActorInputSize, Act
                           const eig::ArrayBase<EigenDerived>&                                     input,
                                 LossFcn_t&                                                        loss_fcn, 
                                 LossGradFcn_t&                                                    loss_grad_fcn, 
-                          const RL::GlobalConfig_t&                                               global_config)
+                          const GlobalConfig_t&                                               global_config)
 {
   constexpr int output_len        = ann_output_len<ActorNHiddenLayers ...>::value;
   constexpr int actor_n_layers    = pack_len<ActorInputSize, ActorNHiddenLayers ...>::value;
@@ -258,5 +246,7 @@ auto actor_gradient_batch(const ANN::ArtificialNeuralNetwork<ActorInputSize, Act
 
   return retval;
 }
+
+} // namespace {learning::to_drive}
 
 #endif

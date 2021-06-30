@@ -45,44 +45,10 @@ using namespace std::chrono_literals;
 #define deg2rad(x) ((x)*0.017453292519943F)
 #define rad2deg(x) ((x)*57.2957795130823208F)
 
-namespace ANN{
-using ArrayXf_t = eig::Array<float, eig::Dynamic, eig::Dynamic, eig::RowMajor>; 
-} // namespace {ANN}
-
-namespace RL {
+namespace global_typedef {
 
 using GlobalConfig_t = std::unordered_map<std::string, float>;
 
-struct State2D{
-  float x;
-  float y;
-};
-
-struct DifferentialRobotState{
-  float x;   // (m)
-  float y;   // (m)
-  float psi; // heading (rad)
-};
-
-struct Action2D{
-  float action1;
-  float action2;
-};
-
-template<size_t N>
-struct Polynomial{
-  eig::Matrix<float, (int)(N+1), 1, eig::ColMajor> coeff;
-  float offset;
-  State2D bound_1;
-  State2D bound_2;
-};
-
-struct RobotState{
-  State2D position;
-  State2D velocity;
-};
-
-} // namespace {RL}
-
+} // namespace {global_typedef}
 
 #endif

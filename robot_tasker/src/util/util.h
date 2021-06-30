@@ -3,7 +3,7 @@
 
 #include "../global_typedef.h"
 
-namespace RL
+namespace util
 {
 
 float linear_interpolate(const float x, 
@@ -47,6 +47,6 @@ std::array<int, N> get_n_shuffled_indices(const int container_size)
   return shuffled_n_indices;
 }
 
-} // namespace {RL}
+} // namespace {util}
 
 #endif
