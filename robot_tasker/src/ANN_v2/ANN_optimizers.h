@@ -1,13 +1,10 @@
 #ifndef _ANN_OPTIMIZERS_H_
 #define _ANN_OPTIMIZERS_H_
 
-#include <random>
 #include "../global_typedef.h"
-
-#include "ANN_typedef.h"
 #include "ANN.h"
 
-namespace ANN
+namespace ann
 {
   
 class SteepestDescentOptimizer{
@@ -117,6 +114,6 @@ class AdamOptimizer{
 
 };
 
-} // namespace {ANN}
+} // namespace {ann}
 
 #endif

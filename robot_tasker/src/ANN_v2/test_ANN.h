@@ -12,7 +12,7 @@
 #include "ANN_core.h"
 #include "cppyplot.hpp"
 
-using namespace ANN;
+using namespace ann;
 
 auto load_moon_data(const std::string& data_file)
 {
@@ -129,12 +129,12 @@ void test_ann()
 
   auto [input, ref_out] = load_moon_data(data_file);
   ArtificialNeuralNetwork<3> network;
-  ANN::set_layer_config(network, 2, 4, 1);
+  ann::set_layer_config(network, 2, 4, 1);
   set_activations(network, RELU(),      SIGMOID());
-  ANN::set_initializers(network, HeNormal(), XavierNormal());
+  ann::set_initializers(network, HeNormal(), XavierNormal());
 
   AdamOptimizer network_opt((int)network.weights.rows(), (int)network.bias.rows(), 0.001F);
-  constexpr size_t max_epoch = 500u;
+  constexpr size_t max_epoch = 1000u;
   eig::Array<float, max_epoch, 1> loss_hist;
   size_t current_epoch       = 0u;
   while(current_epoch < max_epoch)
@@ -158,7 +158,7 @@ void test_ann()
   plt.grid(True)
   plt.xlabel("Epoch", fontsize=12)
   plt.ylabel("Loss", fontsize=12)
-  plt.show()
+  plt.show(block=True)
   )pyp", _p(loss_hist));
   // debug code --end
   

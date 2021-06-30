@@ -6,7 +6,7 @@
 
 #include "../global_typedef.h"
 
-namespace ANN
+namespace ann
 {
 #define UNIFORM (1)
 #define NORMAL  (2)
@@ -106,7 +106,7 @@ class Xavier : public ParamInitializerBase,
     void initialize(const int n_nodes_prev_layer, 
                     eig::Ref<ArrayXf_t> weights) const override
     {
-      const float stddev = 1.0F/std::sqrtf((float)n_nodes_prev_layer);
+      const float stddev = std::sqrtf(1.0F/(float)n_nodes_prev_layer);
       this->fill(stddev, weights);
       this->normalize(weights);
     }
@@ -121,22 +121,22 @@ class He : public ParamInitializerBase,
     void initialize(const int n_nodes_prev_layer, 
                     eig::Ref<ArrayXf_t> weights) const override
     {
-      const float stddev = 2.0F/std::sqrtf((float)n_nodes_prev_layer);
+      const float stddev = std::sqrtf(2.0F/(float)n_nodes_prev_layer);
       this->fill(stddev, weights);
       this->normalize(weights);
     }
 };
 
 
-constexpr auto XavierUniform           = std::make_unique<Xavier<UNIFORM, NO_NORMALIZATION>>;
-constexpr auto XavierUniformNormalized = std::make_unique<Xavier<UNIFORM, L2_NORMALIZATION>>;
-constexpr auto XavierNormal            = std::make_unique<Xavier<NORMAL, NO_NORMALIZATION>>;
-constexpr auto XavierNormalNormalized  = std::make_unique<Xavier<NORMAL, L2_NORMALIZATION>>;
+constexpr static auto XavierUniform           = std::make_unique<Xavier<UNIFORM, NO_NORMALIZATION>>;
+constexpr static auto XavierUniformNormalized = std::make_unique<Xavier<UNIFORM, L2_NORMALIZATION>>;
+constexpr static auto XavierNormal            = std::make_unique<Xavier<NORMAL, NO_NORMALIZATION>>;
+constexpr static auto XavierNormalNormalized  = std::make_unique<Xavier<NORMAL, L2_NORMALIZATION>>;
 
-constexpr auto HeUniform           = std::make_unique<He<UNIFORM, NO_NORMALIZATION>>;
-constexpr auto HeUniformNormalized = std::make_unique<He<UNIFORM, L2_NORMALIZATION>>;
-constexpr auto HeNormal            = std::make_unique<He<NORMAL, NO_NORMALIZATION>>;
-constexpr auto HeNormalNormalized  = std::make_unique< He<NORMAL, L2_NORMALIZATION> >;
+constexpr static auto HeUniform           = std::make_unique<He<UNIFORM, NO_NORMALIZATION>>;
+constexpr static auto HeUniformNormalized = std::make_unique<He<UNIFORM, L2_NORMALIZATION>>;
+constexpr static auto HeNormal            = std::make_unique<He<NORMAL, NO_NORMALIZATION>>;
+constexpr static auto HeNormalNormalized  = std::make_unique< He<NORMAL, L2_NORMALIZATION> >;
 
-} // namespace {ANN}
+} // namespace {ann}
 #endif

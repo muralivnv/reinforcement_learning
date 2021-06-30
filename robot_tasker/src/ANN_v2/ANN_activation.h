@@ -6,7 +6,7 @@
 
 #include "../global_typedef.h"
 
-namespace ANN
+namespace ann
 {
 
 class ActivationBase
@@ -115,11 +115,11 @@ class LeakyReLU : public ActivationBase
     }
 };
 
-constexpr auto NO_ACTIVATION = std::make_unique<NoActivation>;
-constexpr auto SIGMOID       = std::make_unique<Sigmoid>;
-constexpr auto RELU          = std::make_unique<ReLU>;
-constexpr auto LEAKY_RELU    = std::make_unique<LeakyReLU>;
+constexpr static auto NO_ACTIVATION = std::make_unique<NoActivation>;
+constexpr static auto SIGMOID       = std::make_unique<Sigmoid>;
+constexpr static auto RELU          = std::make_unique<ReLU>;
+constexpr static auto LEAKY_RELU    = std::make_unique<LeakyReLU>;
 
-} // namespace {ANN}
+} // namespace {ann}
 
 #endif
