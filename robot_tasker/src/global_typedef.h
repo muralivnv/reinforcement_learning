@@ -47,7 +47,7 @@ using namespace std::chrono_literals;
 
 namespace global_typedef {
 
-using GlobalConfig_t = std::unordered_map<std::string, float>;
+using global_config_t = std::unordered_map<std::string, float>;
 
 } // namespace {global_typedef}
 

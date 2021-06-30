@@ -27,11 +27,11 @@ init_new_episode(std::uniform_real_distribution<float>& state_x_sample,
 float get_exploration_noise(std::normal_distribution<float>& exploration_noise_dist, 
                            std::mt19937& rand_gen);
 
-void state_normalize(const GlobalConfig_t&               global_config, 
+void state_normalize(const global_config_t&               global_config, 
                      eig::Array<float, 1, 2, eig::RowMajor>& policy_state);
 
 bool is_robot_outside_world(const DifferentialRobotState& state,
-                            const GlobalConfig_t&         global_config);
+                            const global_config_t&         global_config);
 
 bool has_robot_reached_target(const DifferentialRobotState& current_state, 
                               const DifferentialRobotState& target_state, 
@@ -59,7 +59,7 @@ auto actor_gradient_batch(const ANN::ArtificialNeuralNetwork<ActorInputSize, Act
                           const eig::ArrayBase<EigenDerived>&                                     input,
                                 LossFcn_t&                                                        loss_fcn, 
                                 LossGradFcn_t&                                                    loss_grad_fcn, 
-                          const GlobalConfig_t&                                               global_config)
+                          const global_config_t&                                               global_config)
 {
   constexpr int output_len        = ann_output_len<ActorNHiddenLayers ...>::value;
   constexpr int actor_n_layers    = pack_len<ActorInputSize, ActorNHiddenLayers ...>::value;

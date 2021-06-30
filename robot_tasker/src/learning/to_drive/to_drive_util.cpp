@@ -48,7 +48,7 @@ float get_exploration_noise(std::normal_distribution<float>& exploration_noise_d
   return exploration_noise;
 }
 
-void state_normalize(const GlobalConfig_t&               global_config, 
+void state_normalize(const global_config_t&               global_config, 
                      eig::Array<float, 1, 2, eig::RowMajor>& policy_state)
 {
   static const float& world_max_x = global_config.at("world/size/x"); 
@@ -62,7 +62,7 @@ void state_normalize(const GlobalConfig_t&               global_config,
 }
 
 bool is_robot_outside_world(const DifferentialRobotState& state,
-                            const GlobalConfig_t&         global_config)
+                            const global_config_t&         global_config)
 {
   static const float& world_max_x = global_config.at("world/size/x");
   static const float& world_max_y = global_config.at("world/size/y"); 

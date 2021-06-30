@@ -10,7 +10,7 @@ using namespace global_typedef;
 
 DifferentialRobotState differential_robot(const DifferentialRobotState& cur_state, 
                                           const WheelSpeeds&            cmd_vel, 
-                                          const GlobalConfig_t&         global_config);
+                                          const global_config_t&         global_config);
 
 } // namespace {learning::to_drive}
 

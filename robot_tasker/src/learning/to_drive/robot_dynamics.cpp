@@ -5,7 +5,7 @@ namespace learning::to_drive
 
 DifferentialRobotState differential_robot(const DifferentialRobotState& cur_state, 
                                           const WheelSpeeds&            cmd_vel, 
-                                          const GlobalConfig_t&         global_config)
+                                          const global_config_t&         global_config)
 {
   DifferentialRobotState next_state;
   static const float& wheel_radius = global_config.at("robot/wheel_radius");

@@ -94,7 +94,7 @@ critic_loss_grad(const eig::Array<float, eig::Dynamic, 1>& Q,
 }
 
 
-auto learn_to_drive(const learning::to_drive::GlobalConfig_t& global_config, const bool logging_enabled = true)
+auto learn_to_drive(const learning::to_drive::global_config_t& global_config, const bool logging_enabled = true)
 {
   static const float& world_max_x = global_config.at("world/size/x"); 
   static const float& world_max_y = global_config.at("world/size/y"); 
