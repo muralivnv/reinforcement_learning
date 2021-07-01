@@ -20,14 +20,18 @@ add_library(to_drive src/learning/to_drive/to_drive_util.cpp
 target_link_libraries(to_drive EIGEN YAML_CPP)
 
 add_executable(${PROJECT_NAME} src/robot_tasker.cpp)
-
 target_compile_options(${PROJECT_NAME} PRIVATE "$<$<CONFIG:DEBUG>:${DEBUG_COMPILER_OPTIONS}>")
 target_compile_options(${PROJECT_NAME} PRIVATE "$<$<CONFIG:RELEASE>:${RELEASE_COMPILER_OPTIONS}>")
-
 target_link_libraries(${PROJECT_NAME} 
                       CPPYPLOT
                       util
                       to_drive)
+
+# Benchmarking
+add_executable(ann_runtime src/tests/ann_runtime.cpp)
+target_compile_options(ann_runtime PRIVATE "$<$<CONFIG:DEBUG>:${DEBUG_COMPILER_OPTIONS}>")
+target_compile_options(ann_runtime PRIVATE "$<$<CONFIG:RELEASE>:${RELEASE_COMPILER_OPTIONS}>")
+target_link_libraries(ann_runtime BENCHMARK EIGEN)
 
 # copy runtime dll's
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
