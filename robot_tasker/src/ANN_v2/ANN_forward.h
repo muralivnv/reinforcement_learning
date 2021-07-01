@@ -12,49 +12,48 @@ forward_batch(const ArtificialNeuralNetwork<N>& network,
               const eig::ArrayBase<EigenDerived>& input)
 {
   const size_t largest_layer_len = *std::max_element(network.n_nodes.begin(), network.n_nodes.end());
+  constexpr int last_layer_idx = N-1;
 
-  eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor> data_block1, data_block2;
+  eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor> data_block1(BatchSize, largest_layer_len), 
+                                                            data_block2(BatchSize, largest_layer_len), 
+                                                            output(BatchSize, (int)network.n_nodes.back());
   int prev_layer_len = (int)input.cols();
-
-  data_block1.resize(BatchSize, largest_layer_len);
-  data_block2.resize(BatchSize, largest_layer_len);
-
   data_block1(all, seq(0, prev_layer_len-1)) = input;
 
   int weights_count = 0;
   int bias_count    = 0;
   for (int layer = 1u; layer < N; layer++)
   {
-    int n_nodes_last_layer = (int)network.n_nodes[layer-1u];
-    int n_nodes_cur_layer  = (int)network.n_nodes[layer];
-    int weights_start      = weights_count;
+    const int n_nodes_last_layer = (int)network.n_nodes[layer-1u];
+    const int n_nodes_cur_layer  = (int)network.n_nodes[layer];
+    const int& weights_start     = weights_count;
+    const int weights_end        = weights_start + n_nodes_last_layer*n_nodes_cur_layer;
+    const int& bias_start        = bias_count;
+    const int bias_end           = bias_start + n_nodes_cur_layer;
     
-    auto b = network.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1));
     auto prev_layer_activation = data_block1(all, seq(0, prev_layer_len-1));
 
-    for (int node = 0; node < n_nodes_cur_layer; node++)
-    {
-      int this_node_weight_start = weights_start+(node*n_nodes_last_layer);
-      int this_node_weight_end   = weights_start+((node+1)*n_nodes_last_layer)-1;
+    auto W    = network.weights(seq(weights_start, weights_end - 1));
+    auto B    = network.bias(seq(bias_start, bias_end-1));
+    auto WX   = prev_layer_activation.matrix() * W.reshaped(n_nodes_last_layer, n_nodes_cur_layer).matrix();
+    auto WX_B = WX.rowwise() + B.matrix().transpose();
+    
+    if (layer != last_layer_idx)
+    { 
+      network.activations[layer-1]->activation(WX_B, data_block2.block(0, 0, BatchSize, n_nodes_cur_layer));
       
-      // calculate wX + b
-      auto w  = network.weights(seq(this_node_weight_start, this_node_weight_end));
-      auto wx = prev_layer_activation.matrix() * w.matrix();
-      auto z = wx.array() + b(node);
-      network.activations[layer-1]->activation(z,  data_block2.block(0, node, BatchSize, 1));
+      // swap data blocks
+      data_block1.swap(data_block2);
+      prev_layer_len = n_nodes_cur_layer;
+      weights_count  = weights_end;
+      bias_count     = bias_end;
     }
-
-    // swap data blocks
-    data_block1.swap(data_block2);
-    prev_layer_len = n_nodes_cur_layer;
-
-    weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
-    bias_count     += n_nodes_cur_layer;
+    else
+    {
+      network.activations[layer-1]->activation(WX_B, output);
+    }
   }
 
-  eig::Array<float, BatchSize, eig::Dynamic, eig::RowMajor> output (BatchSize, prev_layer_len); 
-  output = data_block1(all, seq(0, prev_layer_len-1));
-  
   return output;
 }
 
