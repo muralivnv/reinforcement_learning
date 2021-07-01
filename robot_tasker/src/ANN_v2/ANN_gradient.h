@@ -28,7 +28,8 @@ gradient_batch(const ArtificialNeuralNetwork<N>&    network,
   bias_grad.resize(network.bias.rows(), 1);
 
   // Perform forward propagation
-  vector<Activation_t> activations; 
+  vector<Activation_t> activations;
+  vector<Activation_t>& delta = activations;
   activations.reserve(N);
   activations.emplace_back(input);
 
@@ -36,43 +37,38 @@ gradient_batch(const ArtificialNeuralNetwork<N>&    network,
   int bias_count    = 0;
   for (int layer = 1; layer < N; layer++)
   {
-    int n_nodes_last_layer = (int)network.n_nodes[layer-1];
-    int n_nodes_cur_layer  = (int)network.n_nodes[layer];
-    int weights_start      = weights_count;
+    const int n_nodes_last_layer = (int)network.n_nodes[layer-1];
+    const int n_nodes_cur_layer  = (int)network.n_nodes[layer];
+    const int& weights_start     = weights_count;
+    const int weights_end        = weights_start + n_nodes_cur_layer*n_nodes_last_layer;
+    const int& bias_start        = bias_count;
+    const int bias_end           = bias_start + n_nodes_cur_layer;
     
-    auto b = network.bias(seq(bias_count, bias_count+n_nodes_cur_layer-1));
     activations.emplace_back(BatchSize, n_nodes_cur_layer);
     auto& this_activation = activations[layer];
-    for (int node = 0; node < n_nodes_cur_layer; node++)
-    {
-      int this_node_weight_start = weights_start+(node*n_nodes_last_layer);
-      int this_node_weight_end   = weights_start+((node+1)*n_nodes_last_layer)-1;
 
-      // calculate wX + b
-      auto w  = network.weights(seq(this_node_weight_start, this_node_weight_end));
-      auto wx = (activations[layer-1].matrix() * w.matrix());
-      auto z = wx.array() + b(node);
-      network.activations[layer-1]->activation(z, this_activation.block(0, node, BatchSize, 1));
-    }
-    weights_count  += n_nodes_last_layer*n_nodes_cur_layer;
-    bias_count     += n_nodes_cur_layer;
+    auto W    = network.weights(seq(weights_start, weights_end - 1));
+    auto B    = network.bias(seq(bias_start, bias_end-1));
+    auto WX   = activations[layer-1].matrix() * W.reshaped(n_nodes_last_layer, n_nodes_cur_layer).matrix();
+    auto WX_B = WX.rowwise() + B.matrix().transpose();
+    network.activations[layer-1]->activation(WX_B, this_activation);
+
+    weights_count  = weights_end;
+    bias_count     = bias_end;
   }
+
   // calculate loss
   loss = loss_fcn(activations.back(), ref_out);
 
   // perform backward propagation to calculate gradient
-  // calculate delta for last layer
-  Delta_t delta(BatchSize, largest_layer_len), delta_to_here(BatchSize, largest_layer_len);
   Activation_t this_layer_activation_grad(BatchSize, largest_layer_len);
-  delta_to_here(all, seq(0, network.n_nodes.back()-1)) = loss_grad_fcn(activations.back(), ref_out);
-  
-  int prev_delta_n_cols = (int)network.n_nodes.back();
+
   int n_nodes_this_layer, n_nodes_prev_layer;
   int weight_end, weight_start;
   int bias_end, bias_start;
 
   int next_layer_weights_end = 0, next_layer_weights_start = (int)network.weights.rows();
-  int next_layer_bias_end = 0, next_layer_bias_start = (int)network.bias.rows();
+  int next_layer_bias_start = (int)network.bias.rows();
   for (int layer = N-1; layer != 0; layer--)
   {
     n_nodes_this_layer              = (int)network.n_nodes[layer];
@@ -80,22 +76,21 @@ gradient_batch(const ArtificialNeuralNetwork<N>&    network,
     auto& prev_layer_activations    = activations[layer-1];
     auto this_layer_grad            = this_layer_activation_grad.block(0, 0, BatchSize, n_nodes_this_layer);
     network.activations[layer-1]->grad(activations[layer], this_layer_grad);
+    
+    auto& delta_now = delta[layer];
 
     // calculate delta
     if (layer != (N-1))
     {
-      auto delta_before = delta_to_here(all, seq(0, prev_delta_n_cols-1));
-      for (int node = 0; node < n_nodes_this_layer; node++)
-      {
-        delta(all, node) = (delta_before.matrix()*network.weights(seq(next_layer_weights_start+node, 
-                                                                   next_layer_weights_end, 
-                                                                   n_nodes_this_layer)).eval().matrix());
-      }
+      auto& delta_next   = delta[layer+1];
+      auto W_trans       = (network.weights(seq(next_layer_weights_start, next_layer_weights_end))).matrix().transpose();
+      delta_now          = delta_next.matrix() * W_trans;
     }
     else 
-    { delta.swap(delta_to_here); }
-
-    delta(all, seq(0, n_nodes_this_layer-1)) *= this_layer_grad;
+    {
+      delta_now = loss_grad_fcn(activations.back(), ref_out);
+    }
+    delta_now *= this_layer_grad;
 
     // calculate gradient
     weight_end   = next_layer_weights_start - 1;
@@ -104,21 +99,17 @@ gradient_batch(const ArtificialNeuralNetwork<N>&    network,
     bias_start   = bias_end - n_nodes_this_layer + 1;
    for (int node = 0; node < n_nodes_this_layer; node++)
    {
-      auto temp = delta(all, node);
-      for (int j = 0; j < n_nodes_prev_layer; j++)
-      {
-        auto weight_grad_list = temp*prev_layer_activations(all, j);
-        weight_grad(weight_start+(node*n_nodes_prev_layer)+j) = weight_grad_list.mean();
-      }
+      auto temp = delta_now(all, node);
+      int n = weight_start + (node*n_nodes_prev_layer);
+      int m = n + n_nodes_prev_layer-1;
+
+      weight_grad(seq(n, m)) = (prev_layer_activations.colwise() * temp).colwise().mean();
       bias_grad(bias_start+node) = temp.mean();
    }
-    delta_to_here.swap(delta);
 
     next_layer_weights_end   = weight_end;
     next_layer_weights_start = weight_start;
     next_layer_bias_start    = bias_start;
-    next_layer_bias_end      = bias_end;
-    prev_delta_n_cols        = n_nodes_this_layer;
   }
   return retval;
 }
