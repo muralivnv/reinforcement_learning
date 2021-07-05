@@ -1,8 +1,12 @@
 #include "util.h"
 #include <filesystem>
+#include <fstream>
+#include <unordered_map>
 
 namespace util
 {
+
+namespace filesystem = std::filesystem;
 
 float linear_interpolate(const float x, 
                          const float x1, const float y1, 
@@ -44,6 +48,26 @@ std::string get_file_dir_path(const std::string& filename)
 {
   std::filesystem::path file(filename);
   return file.parent_path().string();
+}
+
+std::unordered_map<std::string, float>
+read_global_config(const std::string& config_name)
+{
+  std::unordered_map<std::string, float> retval;
+  yml::Node config = yml::LoadFile(config_name);
+
+  yml::Node node = config["world"]["size"];
+  retval.insert(std::make_pair("world/size/x", node[0].as<float>()));
+  retval.insert(std::make_pair("world/size/y", node[1].as<float>()));
+
+  yml::Node robot_config = config["robot"];
+  retval.insert(std::make_pair("robot/max_wheel_speed", robot_config["max_wheel_speed"].as<float>()));
+  retval.insert(std::make_pair("robot/wheel_radius", robot_config["wheel_radius"].as<float>()));
+  retval.insert(std::make_pair("robot/base_length", robot_config["base_length"].as<float>()));
+
+  retval.insert(std::make_pair("cycle_time", config["cycle_time"].as<float>()));
+  
+  return retval;
 }
 
 } //namespace {util}

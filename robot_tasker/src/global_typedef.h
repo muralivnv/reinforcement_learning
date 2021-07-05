@@ -42,6 +42,7 @@ using namespace std::chrono_literals;
 #define NOT(X) (!(X))
 #define PI (3.14159265F)
 #define TWO_PI (2.0F*PI)
+#define PI_2 (PI/2.0F)
 #define deg2rad(x) ((x)*0.017453292519943F)
 #define rad2deg(x) ((x)*57.2957795130823208F)
 

@@ -1,19 +1,72 @@
+## Eigen Library
 add_library(EIGEN INTERFACE)
 target_include_directories(EIGEN INTERFACE <path-to-eigen-includes>)
 
+## YAML-CPP Library
 add_library(YAML_CPP INTERFACE)
-target_include_directories(YAML_CPP INTERFACE <path-to-yaml-include>)
-target_link_libraries(YAML_CPP INTERFACE debug <path-to-yaml-debug-lib>/yaml-cpp.lib)
-target_link_libraries(YAML_CPP INTERFACE optimized <path-to-yaml-release-lib>/yaml-cpp.lib)
+target_include_directories(YAML_CPP INTERFACE <path-to-includes>)
+set(YAML_CPP_DEBUG_LIBS <path-to-debug-libs>/yaml-cpp.lib)
+set(YAML_CPP_RELEASE_LIBS <path-to-release-libs>/yaml-cpp.lib)
+target_link_libraries(YAML_CPP INTERFACE "$<$<CONFIG:DEBUG>:${YAML_CPP_DEBUG_LIBS}>")
+target_link_libraries(YAML_CPP INTERFACE "$<$<CONFIG:RELEASE>:${YAML_CPP_RELEASE_LIBS}>")
 
-# cppyplot library and setup process can be found at https://github.com/muralivnv/cpp-pyplot
+## Cppyplot Library
 add_library(CPPYPLOT INTERFACE)
-target_include_directories(CPPYPLOT INTERFACE <path-to-cppyplot-include>)
-target_link_libraries(CPPYPLOT INTERFACE debug <path-to-zmq-debug-lib>/libzmq-mt-gd.lib)
-target_link_libraries(CPPYPLOT INTERFACE optimized <path-to-zmq-release-lib>/libzmq-mt.lib)
+target_include_directories(CPPYPLOT INTERFACE C:/CppPkgs/vcpkg/installed/x86-windows/include/cpputil/cppyplot/include)
+set(CPPYPLOT_DEBUG_LIBS <path-to-debug-libs>/libzmq-mt-gd-4_3_3.lib)
+set(CPPYPLOT_RELEASE_LIBS <path-to-release-libs>/libzmq-mt-4_3_3.lib)
+target_link_libraries(CPPYPLOT INTERFACE "$<$<CONFIG:DEBUG>:${CPPYPLOT_DEBUG_LIBS}>")
+target_link_libraries(CPPYPLOT INTERFACE "$<$<CONFIG:RELEASE>:${CPPYPLOT_RELEASE_LIBS}>")
 
-# Google-benchmark library
+## Google-Benchmark Library
 add_library(BENCHMARK INTERFACE)
-target_include_directories(BENCHMARK INTERFACE <path-to-benchmark-include>)
-target_link_libraries(BENCHMARK INTERFACE <path-to-benchmark-lib>/benchmark.lib
-                                          <path-to-benchmark-lib>/benchmark_main.lib)
+target_include_directories(BENCHMARK INTERFACE <path-to-includes>)
+set(BENCHMARK_DEBUG_LIBS <path-to-release-libs>/benchmark.lib
+                         <path-to-release-libs>/benchmark_main.lib)
+
+set(BENCHMARK_RELEASE_LIBS <path-to-release-libs>/benchmark.lib
+                           <path-to-release-libs>/benchmark_main.lib)
+
+target_link_libraries(BENCHMARK INTERFACE "$<$<CONFIG:DEBUG>:${BENCHMARK_DEBUG_LIBS}>")
+target_link_libraries(BENCHMARK INTERFACE "$<$<CONFIG:RELEASE>:${BENCHMARK_RELEASE_LIBS}>")
+
+## IMGUI-SFML Library
+add_library(IMGUI_SFML INTERFACE)
+target_include_directories(IMGUI_SFML INTERFACE <path-to-includes>)
+set(IMGUI_SFML_DEBUG_LIBS <path-to-debug-libs>/ImGui-SFML.lib
+                          <path-to-debug-libs>/OpenGL32.lib)
+
+set(IMGUI_SFML_RELEASE_LIBS <path-to-release-libs>/ImGui-SFML.lib
+                            <path-to-release-libs>/OpenGL32.lib)
+
+target_link_libraries(IMGUI_SFML INTERFACE "$<$<CONFIG:DEBUG>:${IMGUI_SFML_DEBUG_LIBS}>")
+target_link_libraries(IMGUI_SFML INTERFACE "$<$<CONFIG:RELEASE>:${IMGUI_SFML_RELEASE_LIBS}>")
+
+## IMGUI Library
+add_library(IMGUI INTERFACE)
+target_include_directories(IMGUI INTERFACE <path-to-includes>)
+set(IMGUI_DEBUG_LIBS <path-to-debug-libs>/imguid.lib
+                      <path-to-debug-libs>/implotd.lib)
+
+set(IMGUI_RELEASE_LIBS <path-to-release-libs>/imgui.lib
+                       <path-to-release-libs>/implot.lib)
+
+target_link_libraries(IMGUI INTERFACE "$<$<CONFIG:DEBUG>:${IMGUI_DEBUG_LIBS}>")
+target_link_libraries(IMGUI INTERFACE "$<$<CONFIG:RELEASE>:${IMGUI_RELEASE_LIBS}>")
+
+add_library(SFML INTERFACE)
+target_include_directories(SFML INTERFACE <path-to-includes>)
+set(SFML_DEBUG_LIBS <path-to-debug-libs>/sfml-network-d.lib
+                    <path-to-debug-libs>/sfml-system-d.lib
+                    <path-to-debug-libs>/sfml-window-d.lib
+                    <path-to-debug-libs>/sfml-audio-d.lib
+                    <path-to-debug-libs>/sfml-graphics-d.lib)
+
+set(SFML_RELEASE_LIBS <path-to-release-libs>/sfml-network.lib
+                      <path-to-release-libs>/sfml-system.lib
+                      <path-to-release-libs>/sfml-window.lib
+                      <path-to-release-libs>/sfml-audio.lib
+                      <path-to-release-libs>/sfml-graphics.lib)
+
+target_link_libraries(SFML INTERFACE "$<$<CONFIG:DEBUG>:${SFML_DEBUG_LIBS}>")
+target_link_libraries(SFML INTERFACE "$<$<CONFIG:RELEASE>:${SFML_RELEASE_LIBS}>")

@@ -50,6 +50,9 @@ std::array<int, N> get_n_shuffled_indices(const int container_size)
 
 std::string get_file_dir_path(const std::string& filename);
 
+std::unordered_map<std::string, float>
+read_global_config(const std::string& config_name);
+
 } // namespace {util}
 
 #endif
