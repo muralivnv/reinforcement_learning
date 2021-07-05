@@ -53,8 +53,9 @@ void show_me_what_you_learned(const ActorNetwork_t& actor,
 
     bool is_episode_done = false;
     DifferentialRobotState cur_state, target_state, next_state;
-    eig::Array<float, 1, 2, eig::RowMajor> policy_s_now, policy_action, policy_s_next;
-    eig::Array<float, 1, 4, eig::RowMajor> critic_input;
+    eig::Array<float, 1, 3, eig::RowMajor> policy_s_now, policy_s_next;
+    eig::Array<float, 1, 2, eig::RowMajor> policy_action;
+    eig::Array<float, 1, 5, eig::RowMajor> critic_input;
 
     tie(std::ignore, target_state) = init_new_episode(state_x_sample, state_y_sample, state_psi_sample, rand_gen);
 
@@ -71,7 +72,7 @@ void show_me_what_you_learned(const ActorNetwork_t& actor,
     {
       gui::gui_render_begin();
 
-      tie(policy_s_now(0,0), policy_s_now(0, 1)) = cur_state - target_state;
+      tie(policy_s_now(0,0), policy_s_now(0, 1), policy_s_now(0, 2)) = cur_state - target_state;
       state_normalize(global_config, policy_s_now);
       
       policy_action = forward_batch<1>(actor, policy_s_now);
@@ -79,6 +80,7 @@ void show_me_what_you_learned(const ActorNetwork_t& actor,
       
       critic_input(0, S0) = policy_s_now(0, 0);
       critic_input(0, S1) = policy_s_now(0, 1);
+      critic_input(0, S2) = policy_s_now(0, 2);
       critic_input(0, A0) = policy_action(0, 0);
       critic_input(0, A1) = policy_action(0, 1);
       auto Q   = forward_batch<1>(critic, critic_input);

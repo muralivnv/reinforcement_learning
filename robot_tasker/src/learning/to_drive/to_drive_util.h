@@ -15,7 +15,7 @@ namespace learning::to_drive
 
 using namespace global_typedef;
 
-tuple<float, float> operator-(const DifferentialRobotState& actual, 
+tuple<float, float, float> operator-(const DifferentialRobotState& actual, 
                               const DifferentialRobotState& reference);
 
 tuple<DifferentialRobotState, DifferentialRobotState>
@@ -28,7 +28,7 @@ float get_exploration_noise(std::normal_distribution<float>& exploration_noise_d
                            std::mt19937& rand_gen);
 
 void state_normalize(const global_config_t&               global_config, 
-                     eig::Array<float, 1, 2, eig::RowMajor>& policy_state);
+                     eig::Array<float, 1, 3, eig::RowMajor>& policy_state);
 
 bool is_robot_outside_world(const DifferentialRobotState& state,
                             const global_config_t&         global_config);
@@ -80,8 +80,8 @@ auto actor_gradient_batch(const ANN::ArtificialNeuralNetwork<ActorInputSize, Act
   vector<Activation_t> actor_activations, critic_activations;
   actor_activations.reserve(actor_n_layers);
   critic_activations.reserve(critic_n_layers);
-  critic_activations.emplace_back(Activation_t(BatchSize, 4));
-  critic_activations[0](all, {S0, S1}) = input;
+  critic_activations.emplace_back(Activation_t(BatchSize, 5));
+  critic_activations[0](all, {S0, S1, S2}) = input;
   actor_activations.emplace_back(input);
 
   // calculate and store activations at each layer for actor_network

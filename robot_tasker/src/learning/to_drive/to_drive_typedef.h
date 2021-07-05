@@ -7,11 +7,13 @@ namespace learning::to_drive
 enum ReplayBufferIndices{
   S0 = 0,
   S1, 
+  S2,
   A0, 
   A1, 
   R, 
   NEXT_S0, 
   NEXT_S1,
+  NEXT_S2,
   EPISODE_STATE,
   BUFFER_LEN,
 };
@@ -19,6 +21,7 @@ enum ReplayBufferIndices{
 struct TargetReachSuccessParams{
   float min_req_x_error_to_target;
   float min_req_y_error_to_target;
+  float min_req_heading_error_to_target;
 };
 
 } // namespace {learning::to_drive}
