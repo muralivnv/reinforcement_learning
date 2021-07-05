@@ -9,15 +9,17 @@ using namespace global_typedef;
 tuple<float, float> operator-(const DifferentialRobotState& actual, 
                               const DifferentialRobotState& reference)
 {
-  const float range_error = std::sqrtf( util::squaref(actual.x - reference.x) 
-                                      + util::squaref(actual.y - reference.y) );
+  // const float range_error = std::sqrtf( util::squaref(actual.x - reference.x) 
+  //                                     + util::squaref(actual.y - reference.y) );
 
-  const float heading_req = std::atan2f( (reference.y - actual.y), 
-                                         (reference.x - actual.x));
+  // const float heading_req = std::atan2f( (reference.y - actual.y), 
+  //                                        (reference.x - actual.x));
 
-  const float heading_error = util::wrapto_minuspi_pi(actual.psi - heading_req);
+  // const float heading_error = util::wrapto_minuspi_pi(actual.psi - heading_req);
   
-  return std::make_tuple(range_error, heading_error);
+  // return std::make_tuple(range_error, heading_error);
+
+  return std::make_tuple((actual.x - reference.x), (actual.y - reference.y) );
 }
 
 tuple<DifferentialRobotState, DifferentialRobotState>
@@ -53,12 +55,9 @@ void state_normalize(const global_config_t&               global_config,
 {
   static const float& world_max_x = global_config.at("world/size/x"); 
   static const float& world_max_y = global_config.at("world/size/y"); 
-  static const float max_range_error = std::sqrtf(  (world_max_x)*(world_max_x) 
-                                                  + (world_max_y)*(world_max_y) );
-  static const float max_heading_error = PI;
 
-  policy_state(0, 0) /= max_range_error;
-  policy_state(0, 1) /= max_heading_error;
+  policy_state(0, 0) /= world_max_x;
+  policy_state(0, 1) /= world_max_y;
 }
 
 bool is_robot_outside_world(const DifferentialRobotState& state,
@@ -80,10 +79,10 @@ bool has_robot_reached_target(const DifferentialRobotState& current_state,
                               const TargetReachSuccessParams&   target_reached_criteria)
 {
   bool is_reached = false;
-  auto [range_error, heading_error] = current_state - target_state;
+  auto [x_error, y_error] = current_state - target_state;
 
-  if (   (range_error          < target_reached_criteria.min_req_range_error_to_target  )
-      && (fabsf(heading_error) < target_reached_criteria.min_req_heading_error_to_target) )
+  if (   (fabsf(x_error) < target_reached_criteria.min_req_x_error_to_target)
+      && (fabsf(y_error) < target_reached_criteria.min_req_y_error_to_target) )
   {
     is_reached = true;
   }

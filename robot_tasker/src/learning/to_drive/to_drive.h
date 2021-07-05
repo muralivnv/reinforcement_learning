@@ -18,41 +18,47 @@
 #include "robot_dynamics.h"
 #include "to_drive_util.h"
 
+#include <imgui.h>
+#include <imgui-SFML.h>
+#include <implot.h>
+#include "../../gui/gui.h"
+#include "../../gui/gui_util.h"
+
 using namespace ANN;
 
 namespace learning::to_drive
 {
 
 // local parameters
-static const TargetReachSuccessParams target_reach_params = TargetReachSuccessParams{1.0F, deg2rad(5.0F)};
+static const TargetReachSuccessParams target_reach_params = TargetReachSuccessParams{0.5F, 0.5F};
 
 // reward calculation parameters
 // normalized range error reward calculation
-static const float normalized_range_error_reward_interp_x1 = 0.01F;
-static const float normalized_range_error_reward_interp_y1 = -0.1F;
-static const float normalized_range_error_reward_interp_x2 = 0.80F;
-static const float normalized_range_error_reward_interp_y2 = -2.0F;
+static const float normalized_x_error_reward_interp_x1 = 0.01F;
+static const float normalized_x_error_reward_interp_y1 = -0.1F;
+static const float normalized_x_error_reward_interp_x2 = 0.80F;
+static float normalized_x_error_reward_interp_y2 = -4.0F; // -2.0F original
 
 // normalized heading error reward calculation
-static const float normalized_heading_error_reward_interp_x1 = 0.01F;
-static const float normalized_heading_error_reward_interp_y1 = -0.1F;
-static const float normalized_heading_error_reward_interp_x2 = 0.80F;
-static const float normalized_heading_error_reward_interp_y2 = -4.0F;
+static const float normalized_y_error_reward_interp_x1 = 0.01F;
+static const float normalized_y_error_reward_interp_y1 = -0.1F;
+static const float normalized_y_error_reward_interp_x2 = 0.80F;
+static float normalized_y_error_reward_interp_y2 = -4.0F; // -4.0F original
 
 // reward discount factor
-static const float discount_factor = 0.7F;
+static float discount_factor = 0.7F; // 0.7F original
 
 // function definitions
 float calc_reward(eig::Array<float, 1, 2, eig::RowMajor>& normalized_policy_state)
 {
-  // calculate reward for position error
-  float reward = util::linear_interpolate(normalized_policy_state(0, 0), 
-                                        normalized_range_error_reward_interp_x1,  normalized_range_error_reward_interp_y1,
-                                        normalized_range_error_reward_interp_x2,  normalized_range_error_reward_interp_y2);
-  // calculate reward for heading error
+  // calculate reward for x error
+  float reward = util::linear_interpolate(fabsf(normalized_policy_state(0, 0)), 
+                                        normalized_x_error_reward_interp_x1,  normalized_x_error_reward_interp_y1,
+                                        normalized_x_error_reward_interp_x2,  normalized_x_error_reward_interp_y2);
+  // calculate reward for y error
   reward += util::linear_interpolate(fabsf(normalized_policy_state(0, 1)),   
-                                   normalized_heading_error_reward_interp_x1,  normalized_heading_error_reward_interp_y1,
-                                   normalized_heading_error_reward_interp_x2,  normalized_heading_error_reward_interp_y2);
+                                   normalized_y_error_reward_interp_x1,  normalized_y_error_reward_interp_y1,
+                                   normalized_y_error_reward_interp_x2,  normalized_y_error_reward_interp_y2);
 
   return reward;
 }
@@ -94,7 +100,8 @@ critic_loss_grad(const eig::Array<float, eig::Dynamic, 1>& Q,
 }
 
 
-auto learn_to_drive(const learning::to_drive::global_config_t& global_config, const bool logging_enabled = true)
+auto learn_to_drive(const learning::to_drive::global_config_t& global_config, 
+                    const bool logging_enabled = true)
 {
   static const float& world_max_x = global_config.at("world/size/x"); 
   static const float& world_max_y = global_config.at("world/size/y"); 
@@ -107,15 +114,15 @@ auto learn_to_drive(const learning::to_drive::global_config_t& global_config, co
   const size_t warm_up_cycles = 4u*batch_size;
   const size_t replay_buffer_size = 20u*batch_size;
   const size_t critic_target_update_ncycles = 500u;
-  const float  actor_l2_reg_factor = 1e-2F;
-  const float  critic_l2_reg_factor = 1e-3F;
+  float  actor_l2_reg_factor = 1e-2F;
+  float  critic_l2_reg_factor = 1e-3F;
 
   // experience replay setup
   eig::Array<float, eig::Dynamic, BUFFER_LEN, eig::RowMajor> replay_buffer;
 
   // function approximation setup
-  ArtificialNeuralNetwork<2, 8, 12, 20, 25, 2> actor;
-  ArtificialNeuralNetwork<4, 10, 14, 21, 27, 1> critic, critic_target;
+  ArtificialNeuralNetwork<2, 15, 17, 20, 25, 31, 37, 2> actor;
+  ArtificialNeuralNetwork<4, 10, 14, 21, 27, 34, 1> critic, critic_target;
   AdamOptimizer actor_opt((int)actor.weight.rows(), (int)actor.bias.rows(), 1e-4F);
   AdamOptimizer critic_opt((int)critic.weight.rows(), (int)critic.bias.rows(), 1e-4F);
 
@@ -123,10 +130,13 @@ auto learn_to_drive(const learning::to_drive::global_config_t& global_config, co
               Activation(RELU, HE_UNIFORM),
               Activation(RELU, HE_UNIFORM),
               Activation(RELU, HE_UNIFORM),
+              Activation(RELU, HE_UNIFORM),
+              Activation(RELU, HE_UNIFORM),
               Activation(SIGMOID, HE_UNIFORM)
               );
   
   critic.dense(Activation(RELU, HE_UNIFORM), 
+               Activation(RELU, HE_UNIFORM),
                Activation(RELU, HE_UNIFORM),
                Activation(RELU, HE_UNIFORM),
                Activation(RELU, HE_UNIFORM),
@@ -150,10 +160,18 @@ auto learn_to_drive(const learning::to_drive::global_config_t& global_config, co
   size_t episode_count = 0u, cycle_count = 0u, replay_buffer_len = 0u;
   float critic_loss_avg = 0.0F, actor_loss_avg = 0.0F;
   float loss_smoothing_factor = 0.90F;
+  std::vector<float> actor_loss_hist;
+  std::vector<float> critic_loss_hist;
+  std::vector<float> actor_loss_index;
+  std::vector<float> critic_loss_index;
+
   bool terminate_actor_optim = false;
   bool terminate_critic_optim = false;
-  size_t critic_optim_termination_counter = 0u;
-  size_t actor_optim_termination_counter  = 0u;
+
+  // variables for training during test
+  DifferentialRobotState cur_state_test, next_state_test, target_state_test;
+  eig::Array<float, 1, 2, eig::RowMajor> policy_s_now_test, policy_action_test;
+  bool initialized_test = false;
 
   while(   (episode_count < max_episodes        ) 
         && (   (terminate_actor_optim == false ) 
@@ -168,10 +186,29 @@ auto learn_to_drive(const learning::to_drive::global_config_t& global_config, co
 
     while(NOT(episode_done))
     {
+      gui::gui_render_begin();
+
+      // add necessary sliders and buttons
+      ImGui::Begin("LearningToDrive");
+      ImGui::Text("TuningParams");
+      ImGui::SliderFloat("discount", &discount_factor, 0.0F, 1.0F);
+      ImGui::SliderFloat("max_x_error", &normalized_x_error_reward_interp_y2, -1.0F, -25.0F);
+      ImGui::SliderFloat("max_y_error", &normalized_y_error_reward_interp_y2, -1.0F, -25.0F);
+      ImGui::SliderFloat("actor_l2_reg", &actor_l2_reg_factor, 1e-08F, 1e-01F);
+      ImGui::SliderFloat("critic_l2_reg", &critic_l2_reg_factor, 1e-08F, 1e-01F);
+      ImGui::End();
+
       // sample random robot state from uniform distribution (for better exploration)
-      cur_state.x = state_x_sample(rand_gen);
-      cur_state.y = state_y_sample(rand_gen);
-      cur_state.psi = state_psi_sample(rand_gen);
+      if ((cycle_count % 100) == 0)
+      {
+        cur_state.x = state_x_sample(rand_gen);
+        cur_state.y = state_y_sample(rand_gen);
+        cur_state.psi = state_psi_sample(rand_gen);
+
+        target_state.x = state_x_sample(rand_gen);
+        target_state.y = state_y_sample(rand_gen);
+        target_state.psi = state_psi_sample(rand_gen);
+      }
       
       // calculate policy state
       tie(policy_s_now(0, 0), policy_s_now(0, 1)) = cur_state - target_state;
@@ -192,6 +229,8 @@ auto learn_to_drive(const learning::to_drive::global_config_t& global_config, co
       // check whether a reset is required or not
       episode_done = is_robot_outside_world(next_state, global_config);
       episode_done |= has_robot_reached_target(next_state, target_state, target_reach_params);
+
+      cur_state = next_state;
       
       // store current transition -> S, A, R, S in replay buffer
       replay_buffer_len %= replay_buffer_size;
@@ -211,6 +250,8 @@ auto learn_to_drive(const learning::to_drive::global_config_t& global_config, co
         auto n_transitions = util::get_n_shuffled_indices<batch_size>((int)replay_buffer.rows());
         const float actor_loss_prev = actor_loss_avg;
         const float critic_loss_prev = critic_loss_avg;
+        float actor_wgrad_norm  = 0.0F;
+        float critic_wgrad_norm = 0.0F;
 
         if (NOT(terminate_critic_optim))
         {
@@ -240,6 +281,7 @@ auto learn_to_drive(const learning::to_drive::global_config_t& global_config, co
 
           // update parameters of critic using optimizer
           critic_opt.step(critic_weight_grad, critic_bias_grad, critic.weight, critic.bias);
+          critic_wgrad_norm = std::sqrtf(critic_weight_grad.square().sum());
 
           // hard-update critic target network
           if ( (cycle_count % critic_target_update_ncycles) == 0u)
@@ -254,6 +296,18 @@ auto learn_to_drive(const learning::to_drive::global_config_t& global_config, co
 
           critic_loss_avg *= loss_smoothing_factor;
           critic_loss_avg += (1.0F - loss_smoothing_factor)*critic_loss;
+
+          if (critic_loss_hist.size() < 1000)
+          { 
+            critic_loss_hist.push_back(critic_loss_avg); 
+            critic_loss_index.push_back((float)cycle_count);
+          }
+          else
+          {
+            auto index = cycle_count % 1000;
+            critic_loss_hist[index] = critic_loss_avg;
+            critic_loss_index[index] = (float)cycle_count;
+          }
         }
 
         if (NOT(terminate_actor_optim))
@@ -267,52 +321,132 @@ auto learn_to_drive(const learning::to_drive::global_config_t& global_config, co
                                                                                                   global_config);
           // Use L2 regularization of weights for both actor and critic network
           actor_weight_grad  += (actor_l2_reg_factor*actor.weight)/(float)batch_size;
-        
 
           // update parameters of actor using optimizer
           actor_opt.step(actor_weight_grad, actor_bias_grad, actor.weight, actor.bias);
+          actor_wgrad_norm = std::sqrtf(actor_weight_grad.square().sum());
 
           // update average loss
           actor_loss_avg *= loss_smoothing_factor;
           actor_loss_avg += (1.0F - loss_smoothing_factor)*actor_loss;
+
+          if (actor_loss_hist.size() < 1000)
+          {
+            actor_loss_hist.push_back(actor_loss_avg); 
+            actor_loss_index.push_back((float)cycle_count);
+          }
+          else
+          {
+            auto index = cycle_count % 1000;
+            actor_loss_hist[index] = actor_loss_avg;
+            actor_loss_index[index] = (float)cycle_count;
+          }
         }
 
         if (logging_enabled == true)
         {
           if ( (cycle_count % 20) == 0)
           {
-            std::cout << "E: " << episode_count << " | C: " << cycle_count
-                      << " | AcL: " << actor_loss_avg << " | CrL: " << critic_loss_avg
-                      << " | AcLDelChng: " << fabsf(actor_loss_prev - actor_loss_avg)
-                      << " | CrLDelChng: " << fabsf(critic_loss_prev - critic_loss_avg) << '\n';
+            std::cout << "epoch: " << cycle_count
+                      << " | loss_actor: " << actor_loss_avg << " | loss_critic: " << critic_loss_avg
+                      << " | actor_wgradNorm: " << actor_wgrad_norm
+                      << " | critic_wgradNorm: " << critic_wgrad_norm << '\n';
             std::cout << std::flush;
           }
         }
 
-        if (fabsf(critic_loss_avg) < 3e-3F)
+        ImGui::Begin("LearningToDrive");
+
+        ImGui::Text("Training");
+        static bool run_actor_optim = !terminate_actor_optim;
+        ImGui::Checkbox("actor_optim", &run_actor_optim);
+        terminate_actor_optim = !run_actor_optim;
+
+        static bool run_critic_optim = !terminate_critic_optim;
+        ImGui::Checkbox("critic_optim", &run_critic_optim);
+        terminate_critic_optim = !run_critic_optim;
+
+        if (ImPlot::BeginPlot("actor_loss", NULL, NULL, ImVec2(0, 200),  ImPlotFlags_CanvasOnly, ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit))
         {
-          critic_optim_termination_counter++;
-          if (critic_optim_termination_counter >= critic_target_update_ncycles)
-          {
-            terminate_critic_optim = true;
-          }
-        }
-        else
-        {
-          critic_optim_termination_counter = 0u;
+          ImPlot::SetNextMarkerStyle(ImPlotMarker_Cross, 1);
+          ImPlot::PlotScatter("", actor_loss_index.data(), actor_loss_hist.data(), (int)actor_loss_hist.size());
+          ImPlot::EndPlot();
         }
 
-        if (terminate_critic_optim == true)
+        if (ImPlot::BeginPlot("critic_loss", NULL, NULL, ImVec2(0, 200), ImPlotFlags_CanvasOnly, ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit))
         {
-          actor_optim_termination_counter++;
-          if (actor_optim_termination_counter >= (2u*batch_size) )
+          ImPlot::SetNextMarkerStyle(ImPlotMarker_Cross, 1);
+          ImPlot::PlotScatter("", critic_loss_index.data(), critic_loss_hist.data(), (int)critic_loss_hist.size());
+          ImPlot::EndPlot();
+        }
+        ImGui::End();
+
+        ImGui::Begin("GeneratedSamples");
+        ImGui::Text("State_y vs State_x");
+        if (ImPlot::BeginPlot("State_y vs State_x", NULL, NULL, ImVec2(0, 200), ImPlotFlags_CanvasOnly))
+        {
+          if (replay_buffer.rows() >= 5000)
           {
-            terminate_actor_optim = true;
-            break;
+            eig::Array<float, -1, 1> state_x(5000, 1), state_y(5000, 1);
+            state_x(all, 0) = replay_buffer(seq(0, 4999), (int)S0);
+            state_y(all, 0) = replay_buffer(seq(0, 4999), (int)S1);
+
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Cross, 1);
+            ImPlot::SetNextPlotLimits(-1.0F, 1.0F, -1.0F, 1.0F, ImGuiCond_Always);
+            ImPlot::PlotScatter("", state_x.data(), state_y.data(), (int)state_x.size());
+            ImPlot::EndPlot();
           }
         }
+        ImGui::Text("a_1 vs a_0");
+        if (ImPlot::BeginPlot("a_1 vs a_0", NULL, NULL, ImVec2(0, 200), ImPlotFlags_CanvasOnly))
+        {
+          if (replay_buffer.rows() >= 5000)
+          {
+            eig::Array<float, -1, 1> a_0(5000, 1), a_1(5000, 1);
+            a_0(all, 0) = replay_buffer(seq(0, 4999), (int)A0);
+            a_1(all, 0) = replay_buffer(seq(0, 4999), (int)A1);
+
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Cross, 1);
+            ImPlot::SetNextPlotLimits(0.0F, 1.0F, 0.0F, 1.0F, ImGuiCond_Always);
+            ImPlot::PlotScatter("", a_0.data(), a_1.data(), (int)a_0.size());
+            ImPlot::EndPlot();
+          }
+        }
+        ImGui::End();
+
+        if ( (terminate_critic_optim == true) && (terminate_actor_optim == true) )
+        { break; }
       }
       cycle_count   = util::min(++cycle_count, std::numeric_limits<size_t>::max());
+
+      // test during training
+      {
+        if (initialized_test == false)
+        {
+          tie(cur_state_test, target_state_test) = init_new_episode(state_x_sample, state_y_sample, state_psi_sample, rand_gen);
+          gui::set_target_state(target_state_test.x, target_state_test.y);
+
+          initialized_test = true;
+        }
+
+        tie(policy_s_now_test(0, 0), policy_s_now_test(0, 1)) = cur_state_test - target_state_test;
+        state_normalize(global_config, policy_s_now_test);
+
+        policy_action_test = forward_batch<1>(actor, policy_s_now_test);
+        next_state_test  = differential_robot(cur_state_test, {policy_action_test(0, 0)*action1_max, policy_action_test(0, 1)*action2_max}, global_config);
+        next_state_test.psi = util::wrapto_minuspi_pi(next_state_test.psi);
+
+        gui::set_robot_state(next_state_test.x, next_state_test.y, next_state_test.psi);
+        cur_state_test = next_state_test;
+
+        // check whether a reset is required or not
+        bool test_episode_done = is_robot_outside_world(next_state_test, global_config);
+        test_episode_done |= has_robot_reached_target(next_state_test, target_state_test, target_reach_params);
+
+        initialized_test = !test_episode_done;
+      }
+
+      gui::gui_render_finalize();
     }
 
     episode_count++;

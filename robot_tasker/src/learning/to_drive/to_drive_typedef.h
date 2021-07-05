@@ -17,8 +17,8 @@ enum ReplayBufferIndices{
 };
 
 struct TargetReachSuccessParams{
-  float min_req_range_error_to_target;
-  float min_req_heading_error_to_target;
+  float min_req_x_error_to_target;
+  float min_req_y_error_to_target;
 };
 
 } // namespace {learning::to_drive}
