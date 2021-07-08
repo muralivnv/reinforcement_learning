@@ -36,13 +36,13 @@ world2sfml_heading (const float heading_rad_world)
 {
   float heading_sfml_deg = 0.0F;
   const float heading_deg_world = rad2deg(heading_rad_world);
-  if (heading_deg_world > 90.0F)
+  if (heading_deg_world > 0.0F)
   {
-    heading_sfml_deg  = 450.0F - heading_deg_world;
+    heading_sfml_deg  = 360.0F - heading_deg_world;
   }
   else
   {
-    heading_sfml_deg = 90.0F - heading_deg_world;
+    heading_sfml_deg = -heading_deg_world;
   }
 
   return heading_sfml_deg;
