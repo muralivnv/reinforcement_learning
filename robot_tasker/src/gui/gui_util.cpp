@@ -154,18 +154,19 @@ void calculate_sf_origin()
 
 void set_robot_state(const float x_world_coord, const float y_world_coord, const float psi_world_coord)
 {
-  auto [x_robot, y_robot] = world2sfml_position(x_world_coord, y_world_coord);
+  auto [x_robot, y_robot] = world2sfml_position(x_world_coord, 
+                                                y_world_coord);
   auto heading_deg        = world2sfml_heading(psi_world_coord);
 
-  global_container.robot_position.setPosition(x_robot, y_robot);
-  global_container.robot_position.setRotation(heading_deg);
+  global_container.robot_position.setState(x_robot, y_robot, 
+                                           deg2rad(heading_deg) );
 }
 
 
 void set_target_state(const float x_world_coord, const float y_world_coord)
 {
   auto [x_target, y_target] = world2sfml_position(x_world_coord, y_world_coord);
-  global_container.target_position.setPosition(x_target, y_target);
+  global_container.target_position.setState(x_target, y_target);
 }
 
 

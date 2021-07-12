@@ -56,16 +56,17 @@ void initiate_gui(const string& global_config)
   // initiate robot
   // create marker for robot position
   auto [x_ini_pos, y_ini_pos] = world2sfml_position(50.0F, 50.0F);
-  global_container.robot_position = sf::CircleShape{5, 3};
-  global_container.robot_position.setFillColor(sf::Color::Magenta);
-  global_container.robot_position.setPosition(x_ini_pos, y_ini_pos);
+  global_container.robot_position.setFillColor(world_draw_params.world_bg_color);
+  global_container.robot_position.setOutlineThickness(2.0F);
+  global_container.robot_position.setOutlineColor(world_draw_params.robot_color);
+  global_container.robot_position.setState(x_ini_pos, y_ini_pos, PI/3.0F);
 
   // initiate target
   // create marker for target position
   tie (x_ini_pos, y_ini_pos) = world2sfml_position(124.0F, 678.0F);
-  global_container.target_position = sf::CircleShape{5};
-  global_container.target_position.setFillColor(sf::Color::Black);
-  global_container.target_position.setPosition(x_ini_pos, y_ini_pos);
+  global_container.target_position.setOutlineThickness(2.0F);
+  global_container.target_position.setOutlineColor(sf::Color::Black);
+  global_container.target_position.setState(x_ini_pos, y_ini_pos);
 }
 
 
