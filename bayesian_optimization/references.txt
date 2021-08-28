@@ -1,0 +1,6 @@
+https://arxiv.org/pdf/2010.03597.pdf
+https://krasserm.github.io/2018/03/21/bayesian-optimization/
+https://machinelearningmastery.com/what-is-bayesian-optimization/
+https://juanitorduz.github.io/gaussian_process_reg/
+https://www.borealisai.com/en/blog/tutorial-8-bayesian-optimization/
+https://www.ritchievink.com/blog/2019/08/25/algorithm-breakdown-bayesian-optimization/
